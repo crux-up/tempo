@@ -19,7 +19,9 @@ npm run build               # server to dist/, dashboard to web/dist/
 npm start                   # http://127.0.0.1:3000
 ```
 
-Development mode, with the API on port 3000 under `tsx watch` and the Vite dashboard on port 5173 proxying `/api`:
+`cp` works in bash, zsh and PowerShell; in `cmd.exe` use `copy`. Variables already set in the shell take precedence over `.env`.
+
+Development mode, with the API on port 3000 under `tsx watch` and the Vite dashboard on port 5173 proxying `/api` to `127.0.0.1:3000` (fixed in `web/vite.config.ts`, so keep `PORT=3000` in development):
 
 ```bash
 npm run dev
@@ -50,7 +52,7 @@ npm run eval        # live model calls against 4 fixed fact sheets; costs money,
 | `HOST` / `PORT` | `127.0.0.1` / `3000` | Bind address. |
 | `DATABASE_PATH` | `./data/tempo.db` | Directory is created on start. |
 | `SYNC_TTL_MINUTES` | `15` | How stale stored data may get before a request re-syncs. |
-| `SYNC_MAX_PAGES` / `SYNC_MAX_SECONDS` | `40` / `25` | Budget for one synchronous sync. |
+| `SYNC_MAX_PAGES` / `SYNC_MAX_SECONDS` | `40` / `25` | Budget for one synchronous sync, checked after each page (so a sync can overrun slightly). |
 | `NARRATIVE_MAX_PER_HOUR` / `NARRATIVE_MAX_PER_CLIENT_PER_HOUR` | `30` / `10` | Model-call budgets. Cache hits are free. |
 | `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Host-header allowlist (no ports). |
 | `TRUST_PROXY` | `false` | `false`, a hop count, or proxy IPs/CIDRs. Never `true`. |
@@ -69,10 +71,10 @@ The service then loads the window's rows, drops anything after `dataAsOf` so the
 - **GraphQL over REST.** One paginated GraphQL query returns PRs with their first 50 reviews, ordered by `UPDATED_AT DESC`. REST would need one extra call per PR for reviews, and the update ordering makes incremental sync a matter of walking back to the last sync time. The cost is a second query for the rare PR with more than 50 reviews, which counts against the sync budget.
 - **SQLite, TTL and a budgeted backfill with a stored page position.** Data is fetched on demand and reused until the TTL passes. A sync stops at `SYNC_MAX_PAGES` requests or `SYNC_MAX_SECONDS`, records the GraphQL page position where the backfill stopped, and reports `coverage.partial` so the dashboard says how much of the window is real. The next request resumes from that position instead of re-reading the newest pages. SQLite needs no extra process, which keeps the reviewer's setup to `npm install`.
 - **Pure metrics module.** Every counting rule lives in `src/metrics/reviewFlow.ts` with no database or network access. The tests feed it hand-built rows with hand-computed expected values, and `totals` equal the sum of the per-person rows so anyone can check the arithmetic.
-- **Fact-id evidence verification.** The model never supplies a number that reaches the client. It cites fact ids, and the server attaches the label, value and unit from the fact sheet. Unknown ids, null-valued facts and evidence lists that cite only `meta.*` context are dropped, a finding or hypothesis left without evidence is removed, and confidence is capped by sample size (0.3 under 10 PRs, 0.5 under 20). The response says exactly what was dropped or capped. This makes the evidence chain checkable rather than trusted.
+- **Fact-id evidence verification.** Every evidence value comes from the server's fact sheet. The model supplies fact ids, the wording and a confidence. The server attaches the label, value and unit for each id. It drops unknown ids, null-valued facts and evidence lists that cite only `meta.*` context, and removes a finding or hypothesis left without evidence. It clamps confidence to [0, 1] and caps it by sample size (0.3 under 10 PRs, 0.5 under 20). The response says exactly what was dropped or capped. The prose itself is not machine-checked: the prompt forbids numbers in it, and `npm run eval` warns when a prose field contains digits, but nothing verifies that a claim agrees with its evidence. The evidence chain is checkable; the wording is still model output.
 - **Day-aligned narrative windows.** Narratives cover whole UTC days and an open-ended window ends at the last midnight at or before `dataAsOf`. The fact sheet, and so the cache key, then stays identical all day, so repeat requests are free. The dashboard's default range ends yesterday for the same reason, which also makes the narrative's evidence values equal the numbers on screen.
 - **Synchronous sync with a budget instead of a background job.** A request that needs data waits for a bounded sync. This keeps the system to one process with no queue, scheduler or job state, and the response is always honest about coverage. The price is a slow first request and several requests to fully backfill a busy repository.
-- **Docker skipped.** Docker is not installed on the build machine, so I could not verify a Dockerfile. I chose not to ship one untested.
+- **No Dockerfile yet.** I could not verify a container build on the build machine, and I preferred not to ship an untested one. It is the first item under next steps.
 - **Problem types as URNs.** `urn:tempo:problem:<slug>` identifies each error without implying a documentation domain the project would have to own.
 
 ## Trade-offs and things deliberately not done
