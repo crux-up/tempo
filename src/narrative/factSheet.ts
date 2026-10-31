@@ -1,4 +1,6 @@
+import { unlinkedCommitCount } from '../domain/report.js';
 import type { PersonStats, ReviewFlowReport, TeamStats, WeekStats } from '../domain/types.js';
+import { ordinal } from '../metrics/stats.js';
 
 export type Fact = {
   id: string;
@@ -8,13 +10,14 @@ export type Fact = {
   unit: 'count' | 'hours' | 'share' | 'login' | 'week' | 'datetime';
   sampleSize?: number;
 };
-export type Signal = { id: string; description: string; factIds: string[] };
+type Signal = { id: string; description: string; factIds: string[] };
 export type FactSheet = { repo: string; window: { from: string; to: string }; facts: Fact[]; signals: Signal[] };
 
 /** GitHub login shape. Anything else is withheld from the sheet so free text cannot reach the prompt. */
 const LOGIN = /^[A-Za-z0-9-]+(\[bot\])?$/;
 const TOP_N = 10;
-const MIN_WEEK_SAMPLE = 3;
+/** Fewest first reviews a week needs before its median is compared with another week's. */
+export const MIN_WEEK_SAMPLE = 3;
 
 const isLogin = (login: string | null): login is string => login !== null && LOGIN.test(login);
 
@@ -49,7 +52,6 @@ function teamFacts(team: TeamStats, people: PersonStats[]): Fact[] {
   const ttm = team.timeToMerge;
   const awaiting = team.awaitingFirstReview;
   const concentration = team.reviewConcentration;
-  const unlinkedCommits = people.filter((p) => p.unlinked).reduce((sum, p) => sum + p.commits, 0);
   return [
     { id: 'team.prsOpened', label: 'PRs opened', value: team.prsOpened, unit: 'count' },
     { id: 'team.prsMerged', label: 'PRs merged', value: team.prsMerged, unit: 'count' },
@@ -135,7 +137,7 @@ function teamFacts(team: TeamStats, people: PersonStats[]): Fact[] {
     {
       id: 'team.unlinkedCommits',
       label: 'Commits by authors without a linked GitHub account',
-      value: unlinkedCommits,
+      value: unlinkedCommitCount(people),
       unit: 'count',
     },
     {
@@ -176,7 +178,7 @@ function metaFacts(report: ReviewFlowReport): Fact[] {
 
 const topBy = (people: PersonStats[], field: PersonField) =>
   [...people]
-    .sort((a, b) => b[field] - a[field] || (a.login < b.login ? -1 : a.login > b.login ? 1 : 0))
+    .sort((a, b) => b[field] - a[field] || ordinal(a.login, b.login))
     .slice(0, TOP_N);
 
 /** Linked people with GitHub-shaped logins: top N by PRs reviewed plus top N by PRs merged, in report order. */

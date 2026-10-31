@@ -4,9 +4,9 @@ import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { AppError, PROBLEM_BASE, RouteNotFoundError } from '../errors.js';
 
-export const PROBLEM_CONTENT_TYPE = 'application/problem+json; charset=utf-8';
+const PROBLEM_CONTENT_TYPE = 'application/problem+json; charset=utf-8';
 
-export const ProblemSchema = z
+const ProblemSchema = z
   .object({
     type: z.string().describe('URI identifying the problem type: urn:tempo:problem:<slug>, or about:blank'),
     title: z.string(),
@@ -33,6 +33,7 @@ export const jsonResponse = <T extends z.ZodType>(description: string, schema: T
   description,
   content: { 'application/json': { schema } },
 });
+
 type FieldError = { path: string; message: string };
 
 type ProblemInput = {
@@ -52,7 +53,7 @@ export function requestPath(request: FastifyRequest): string {
   return queryStart === -1 ? request.url : request.url.slice(0, queryStart);
 }
 
-export function sendProblem(request: FastifyRequest, reply: FastifyReply, input: ProblemInput): FastifyReply {
+function sendProblem(request: FastifyRequest, reply: FastifyReply, input: ProblemInput): FastifyReply {
   const body: Problem = {
     type: input.type,
     title: input.title,
@@ -73,7 +74,7 @@ export function sendProblem(request: FastifyRequest, reply: FastifyReply, input:
     .send(JSON.stringify(body));
 }
 
-export function sendAppError(request: FastifyRequest, reply: FastifyReply, error: AppError): FastifyReply {
+function sendAppError(request: FastifyRequest, reply: FastifyReply, error: AppError): FastifyReply {
   return sendProblem(request, reply, {
     status: error.status,
     type: error.type,

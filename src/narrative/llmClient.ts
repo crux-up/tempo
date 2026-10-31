@@ -47,7 +47,7 @@ const DEFAULT_RETRY_AFTER_SECONDS = 60;
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 const OUTPUT_FORMAT = betaZodOutputFormat(NarrativeDraftSchema);
 
-const EMPTY_USAGE: TokenUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+export const EMPTY_USAGE: TokenUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
 
 const REFUSED = 'The model declined to analyse this data';
 const TRUNCATED = 'The model ran out of output tokens before finishing the narrative';
@@ -124,7 +124,7 @@ function messageUsage(message: Message): TokenUsage {
   );
 }
 
-const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
+export const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
   inputTokens: a.inputTokens + b.inputTokens,
   outputTokens: a.outputTokens + b.outputTokens,
   cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,

@@ -3,6 +3,9 @@ const DAY_MS = 86_400_000;
 
 const ascending = (values: number[]): number[] => [...values].sort((a, b) => a - b);
 
+/** Ordinal (UTF-16 code unit) string order: independent of the server locale. */
+export const ordinal = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
 /** Middle value; the mean of the two middle values for an even count. */
 export function median(values: number[]): number | null {
   if (values.length === 0) return null;

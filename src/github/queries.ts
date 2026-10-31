@@ -1,6 +1,6 @@
-export const PR_PAGE_SIZE = 50;
-export const REVIEW_PAGE_SIZE = 50;
-export const COMMIT_PAGE_SIZE = 100;
+const PR_PAGE_SIZE = 50;
+const REVIEW_PAGE_SIZE = 50;
+const COMMIT_PAGE_SIZE = 100;
 
 const REVIEW_FIELDS = `
   pageInfo { hasNextPage endCursor }

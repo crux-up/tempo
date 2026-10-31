@@ -1,8 +1,9 @@
 import { BadRequestError } from '../errors.js';
 import type { TimeWindow } from './types.js';
 
-const DAY_MS = 86_400_000;
-const DEFAULT_DAYS = 30;
+export const DAY_MS = 86_400_000;
+/** Length of the window when the request gives no `from`. */
+export const DEFAULT_WINDOW_DAYS = 30;
 const MAX_DAYS = 366;
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -29,7 +30,7 @@ export function parseWindow(query: { from?: string; to?: string }, now: Date): T
   const requestedTo = query.to === undefined ? now : parseInstant('to', query.to);
   const to = requestedTo > now ? now : requestedTo;
   const from =
-    query.from === undefined ? new Date(to.getTime() - DEFAULT_DAYS * DAY_MS) : parseInstant('from', query.from);
+    query.from === undefined ? new Date(to.getTime() - DEFAULT_WINDOW_DAYS * DAY_MS) : parseInstant('from', query.from);
   if (from >= to) throw new BadRequestError('from must be earlier than to');
   if (to.getTime() - from.getTime() > MAX_DAYS * DAY_MS) {
     throw new BadRequestError(`The window must not exceed ${MAX_DAYS} days`);

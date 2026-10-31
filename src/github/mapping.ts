@@ -1,8 +1,8 @@
 import type { CommitRow, PullRequestRow, ReviewRow, ReviewState } from '../domain/types.js';
 
-export type RawActor = { __typename: string; login: string } | null;
+type RawActor = { __typename: string; login: string } | null;
 
-export type RawReview = {
+type RawReview = {
   id: string;
   state: string;
   submittedAt: string | null;

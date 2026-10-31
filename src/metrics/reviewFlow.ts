@@ -11,7 +11,7 @@ import type {
   WeekStats,
 } from '../domain/types.js';
 import { inWindow } from '../domain/window.js';
-import { hoursBetween, isoWeek, median, percentile, roundTo } from './stats.js';
+import { hoursBetween, isoWeek, median, ordinal, percentile, roundTo } from './stats.js';
 
 const WEEK_MS = 7 * 86_400_000;
 
@@ -147,9 +147,6 @@ function accumulatePeople(ctx: Prepared, opened: PullRequestRow[], merged: PullR
   }
   return [...map.values()];
 }
-
-// Ordinal (code unit) comparison keeps the order independent of the server locale.
-const ordinal = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 const byReviewThenMergeThenLogin = (a: PersonStats, b: PersonStats): number =>
   b.prsReviewed - a.prsReviewed || b.prsMerged - a.prsMerged || ordinal(a.login, b.login);

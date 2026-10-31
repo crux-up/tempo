@@ -13,7 +13,7 @@ export type RepoRecord = {
   backfillCursor: string | null;
 };
 
-export type StoredNarrative = { body: unknown; model: string; promptVersion: string; createdAt: string };
+type StoredNarrative = { body: unknown; model: string; promptVersion: string; createdAt: string };
 
 type RepoDbRow = {
   id: number;

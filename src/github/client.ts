@@ -41,7 +41,7 @@ export interface GitHubSource {
   commitPages(repo: RepoRef, branch: string, since: string, until: string): AsyncIterable<CommitRow[]>;
 }
 
-export type GitHubClientOptions = {
+type GitHubClientOptions = {
   token: string;
   fetchFn?: typeof fetch;
   logger: Logger;

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { z } from 'zod';
 import { ConfigError } from './errors.js';
 
@@ -68,4 +69,18 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     syncMaxSeconds: e.SYNC_MAX_SECONDS,
     logLevel: e.LOG_LEVEL,
   };
+}
+
+/** Loads `.env` when present, then the config; on invalid configuration prints the error and exits. */
+export function readConfig(): Config {
+  if (existsSync('.env')) process.loadEnvFile('.env');
+  try {
+    return loadConfig(process.env);
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      console.error(err.message);
+      process.exit(1);
+    }
+    throw err;
+  }
 }

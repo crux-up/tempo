@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { Store } from '../db/store.js';
+import { hasActivity } from '../domain/report.js';
 import type { Coverage, NarrativeQuery, RepoRef, ReviewFlowQuery, ReviewFlowReport } from '../domain/types.js';
+import { DAY_MS, DEFAULT_WINDOW_DAYS } from '../domain/window.js';
 import type { Logger } from '../logger.js';
+import { ordinal } from '../metrics/stats.js';
 import type { ReviewFlowService } from '../services/reviewFlowService.js';
 import { repoKey } from '../sync/syncService.js';
 import { buildFactSheet, type FactSheet } from './factSheet.js';
@@ -36,8 +39,7 @@ const StoredBodySchema = NarrativeResponseSchema.omit({ cached: true });
 /** Reported as the model of a narrative that no model wrote. */
 const NO_MODEL = 'none';
 
-/** The default window length, as in `parseWindow`. */
-const DEFAULT_WINDOW_MS = 30 * 86_400_000;
+const DEFAULT_WINDOW_MS = DEFAULT_WINDOW_DAYS * DAY_MS;
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 
@@ -47,14 +49,11 @@ function stableJson(value: unknown): string {
   if (value !== null && typeof value === 'object') {
     const entries = Object.entries(value)
       .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+      .sort(([a], [b]) => ordinal(a, b));
     return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`).join(',')}}`;
   }
   return JSON.stringify(value);
 }
-
-const hasActivity = (report: ReviewFlowReport) =>
-  report.team.prsOpened + report.team.prsMerged + report.team.reviewsSubmitted > 0;
 
 const reportContext = (report: ReviewFlowReport) => ({
   repo: report.repo,
@@ -77,7 +76,7 @@ export class NarrativeService {
     const startedAt = performance.now();
     const { refresh, ...reportQuery } = query;
     const report = await this.snappedReport(repo, reportQuery);
-    if (!hasActivity(report)) return this.emptyNarrative(report);
+    if (!hasActivity(report.team)) return this.emptyNarrative(report);
 
     const sheet = buildFactSheet(report);
     const key = this.cacheKey(report, sheet);

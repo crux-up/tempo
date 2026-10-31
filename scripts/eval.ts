@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEFAULT_ANTHROPIC_MODEL } from '../src/config.js';
 import type { FactSheet } from '../src/narrative/factSheet.js';
-import { createAnthropicNarrativeModel, type TokenUsage } from '../src/narrative/llmClient.js';
+import { addUsage, createAnthropicNarrativeModel, EMPTY_USAGE } from '../src/narrative/llmClient.js';
 import { PROMPT_VERSION } from '../src/narrative/prompt.js';
 import { confidenceCap, verifyNarrative, type Narrative } from '../src/narrative/verify.js';
 
@@ -92,7 +92,7 @@ async function main(): Promise<void> {
   const model = process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL;
   const narrativeModel = createAnthropicNarrativeModel({ apiKey, model, logger });
   const rows: Row[] = [];
-  const total: TokenUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  let total = EMPTY_USAGE;
 
   for (const testCase of loadCases()) {
     const started = Date.now();
@@ -100,10 +100,7 @@ async function main(): Promise<void> {
     try {
       const result = await narrativeModel.draft(testCase.sheet);
       row.latencyMs = Date.now() - started;
-      total.inputTokens += result.usage.inputTokens;
-      total.outputTokens += result.usage.outputTokens;
-      total.cacheReadTokens += result.usage.cacheReadTokens;
-      total.cacheWriteTokens += result.usage.cacheWriteTokens;
+      total = addUsage(total, result.usage);
 
       const narrative = verifyNarrative(result.draft, testCase.sheet);
       const cap = confidenceCap(testCase.sheet);

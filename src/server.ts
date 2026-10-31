@@ -1,9 +1,7 @@
-import { existsSync } from 'node:fs';
 import { buildApp, createLogger } from './app.js';
-import { loadConfig, type Config } from './config.js';
+import { readConfig } from './config.js';
 import { openDatabase } from './db/database.js';
 import { Store } from './db/store.js';
-import { ConfigError } from './errors.js';
 import { createGitHubClient } from './github/client.js';
 import { createAnthropicNarrativeModel } from './narrative/llmClient.js';
 import { NarrativeService } from './narrative/narrativeService.js';
@@ -11,19 +9,6 @@ import { ReviewFlowService } from './services/reviewFlowService.js';
 import { SyncService } from './sync/syncService.js';
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
-
-function readConfig(): Config {
-  if (existsSync('.env')) process.loadEnvFile('.env');
-  try {
-    return loadConfig(process.env);
-  } catch (err) {
-    if (err instanceof ConfigError) {
-      console.error(err.message);
-      process.exit(1);
-    }
-    throw err;
-  }
-}
 
 async function main(): Promise<void> {
   const config = readConfig();

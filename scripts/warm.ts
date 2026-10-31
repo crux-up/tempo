@@ -1,28 +1,14 @@
-import { existsSync } from 'node:fs';
 import { createLogger } from '../src/app.js';
-import { loadConfig, type Config } from '../src/config.js';
+import { readConfig } from '../src/config.js';
 import { openDatabase } from '../src/db/database.js';
 import { Store } from '../src/db/store.js';
 import { parseWindow } from '../src/domain/window.js';
-import { AppError, ConfigError } from '../src/errors.js';
+import { AppError } from '../src/errors.js';
 import { createGitHubClient } from '../src/github/client.js';
 import { RepoParams } from '../src/http/params.js';
 import { SyncService } from '../src/sync/syncService.js';
 
 const USAGE = 'Usage: npm run warm -- <owner/name> [from] [to]';
-
-function readConfig(): Config {
-  if (existsSync('.env')) process.loadEnvFile('.env');
-  try {
-    return loadConfig(process.env);
-  } catch (err) {
-    if (err instanceof ConfigError) {
-      console.error(err.message);
-      process.exit(1);
-    }
-    throw err;
-  }
-}
 
 async function main(): Promise<void> {
   const [slug, from, to] = process.argv.slice(2);

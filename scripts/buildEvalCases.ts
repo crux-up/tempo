@@ -1,8 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { PersonStats, WeekStats } from '../src/domain/types.js';
+import type { PersonStats, ReviewFlowReport, WeekStats } from '../src/domain/types.js';
 import { buildFactSheet } from '../src/narrative/factSheet.js';
-import type { ReviewFlowReport } from '../src/domain/types.js';
 
 /** Regenerates scripts/evalCases/*.json from the hand-written reports below, through the real buildFactSheet. */
 
