@@ -36,7 +36,7 @@ export type RawCommit = {
 const GHOST = 'ghost';
 const MAX_NAME_LENGTH = 100;
 /** C0/C1 controls plus the bidi marks, embeddings, overrides and isolates that can disguise a name. */
-const UNSAFE_NAME_CHARS = /[\p{Cc}؜‎‏‪-‮⁦-⁩]/gu;
+const UNSAFE_NAME_CHARS = /[\p{Cc}\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu;
 const BOT_SUFFIX = '[bot]';
 const REVIEW_STATES: ReadonlySet<string> = new Set<ReviewState>([
   'APPROVED',

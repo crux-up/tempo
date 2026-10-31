@@ -433,16 +433,20 @@ describe('commitPages', () => {
     const h = harness([
       commitPage(
         [
-          rawCommit('a1', { author: { name: 'admin‮nimda\u0007⁦x⁩‏', user: null } }),
+          rawCommit('a1', { author: { name: 'admin\u202Enimda\u0007\u2066x\u2069\u200F', user: null } }),
           rawCommit('a2', { author: { name: 'n'.repeat(150), user: null } }),
-          rawCommit('a3', { author: { name: `${'é'.repeat(99)}\u{1F600}tail`, user: null } }),
+          rawCommit('a3', { author: { name: `${'\u00E9'.repeat(99)}\u{1F600}tail`, user: null } }),
         ],
         false,
         null,
       ),
     ]);
     const [page] = await collect(h.client.commitPages(repo, 'main', 'a', 'b'));
-    expect(page?.commits.map((c) => c.authorName)).toEqual(['adminnimdax', 'n'.repeat(100), `${'é'.repeat(99)}\u{1F600}`]);
+    expect(page?.commits.map((c) => c.authorName)).toEqual([
+      'adminnimdax',
+      'n'.repeat(100),
+      `${'\u00E9'.repeat(99)}\u{1F600}`,
+    ]);
   });
 
   it('yields nothing when the branch does not exist', async () => {
