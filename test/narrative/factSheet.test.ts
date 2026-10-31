@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WeekStats } from '../../src/domain/types.js';
 import { buildFactSheet, type Fact, type FactSheet } from '../../src/narrative/factSheet.js';
+import { SYSTEM_PROMPT } from '../../src/narrative/prompt.js';
 import type { ReviewFlowReport } from '../../src/domain/types.js';
 import { personRow, smallReport } from './reportFixture.js';
 
@@ -239,5 +240,15 @@ describe('buildFactSheet context facts', () => {
     expect(fact(sheet, 'meta.coveragePartial').value).toBe(1);
     expect(fact(sheet, 'meta.coverageTo')).toMatchObject({ value: '2026-03-14T00:00:00.000Z', unit: 'datetime' });
     expect(sheet.facts.some((f) => f.id === 'meta.coverageFrom')).toBe(false);
+  });
+
+  it('emits only meta facts that the system prompt explains', () => {
+    const report = smallReport();
+    const coverage = { partial: true, from: '2026-03-04T00:00:00.000Z', to: '2026-03-14T00:00:00.000Z' };
+    const metaIds = buildFactSheet({ ...report, coverage })
+      .facts.map((f) => f.id)
+      .filter((id) => id.startsWith('meta.'));
+    expect(metaIds).toEqual(['meta.includeBots', 'meta.coveragePartial', 'meta.coverageFrom', 'meta.coverageTo']);
+    for (const id of metaIds) expect(SYSTEM_PROMPT).toContain(`${id} is`);
   });
 });
