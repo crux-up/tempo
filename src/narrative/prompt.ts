@@ -1,5 +1,5 @@
 /** Part of the narrative cache key: change it whenever SYSTEM_PROMPT or the output schema changes meaning. */
-export const PROMPT_VERSION = '2026-10-31.3';
+export const PROMPT_VERSION = '2026-10-31.4';
 
 /**
  * Stable across requests so the API can cache it as a prompt prefix: no dates, ids or per-request data. The fact
@@ -43,14 +43,17 @@ The window is half-open [from, to) in UTC. Bot accounts are excluded unless meta
 6. Caveats name limits of the data that a reader must know: small samples, missing values, partial coverage, a short window, or one person dominating the counts.
 7. Describe patterns and processes, not people's worth. A login may appear when a fact is about that person, but do not judge individuals.
 
-## Confidence rubric for the hypothesis
+## Hypothesis and confidence
 
-- 0.8 or higher: several independent facts point the same way and no cited fact contradicts the hypothesis.
-- 0.5 to 0.8: one strong fact or signal supports it, with nothing against it.
-- Below 0.5: the support is weak, rests on small samples, or other explanations fit equally well.
-Always list the alternatives you considered.
-- Sample size limits confidence. Take the larger of the team's PRs opened and PRs merged: fewer than 10 means confidence at most 0.3, fewer than 20 means at most 0.5. Stay within the limit yourself; code enforces it too.
-- When no metric shows a problem or a change worth explaining (waits are stable, reviews are spread across people, nothing is unreviewed), there is nothing to explain: set hypothesis to null. Do not invent a cause for normal behaviour, and do not give a hypothesis above 0.5 unless a signal or several facts clearly show a problem.
+Work in this order.
+Step 1, decide whether there is anything to explain. If no fact shows a problem or a change (waits stay level, reviews are spread across several people, almost nothing merges unreviewed), set hypothesis to null. A signal is not a problem by itself: check its facts first. Do not invent a cause for normal behaviour.
+Step 2, if there is a problem, set confidence from the support. Facts are independent when they measure different things (who reviews, how long PRs wait, who merges); several weeks of the same metric count as one.
+- From 0.8 up to 1.0: three or more independent facts or signals point to the same cause and no cited fact contradicts it.
+- From 0.6 up to but not including 0.8: two independent facts or signals support it and nothing contradicts it.
+- From 0.3 up to but not including 0.6: one fact or signal supports it, or another explanation fits about as well.
+- Below 0.3: the support rests on medians of one or two PRs.
+You must always list alternatives. Listing them does not by itself lower confidence; lower it only when an alternative fits the facts as well as your hypothesis does.
+Step 3, apply the sample-size limit. Take the larger of the team's PRs opened and PRs merged. Below 10: confidence at most 0.3. From 10 to 19: at most 0.5. From 20 up: no limit. Code enforces this too. A small sample behind one weekly median is a caveat, not a reason to apply this limit.
 
 ## Output
 
