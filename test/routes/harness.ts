@@ -12,7 +12,7 @@ import { ReviewFlowService } from '../../src/services/reviewFlowService.js';
 import { coverageOf, repoKey, type SyncResult } from '../../src/sync/syncService.js';
 import { AS_OF, commits, pullRequests, reviews } from '../fixtures/smallRepo.js';
 
-export const TOKEN = 'ghp_TESTTOKEN0123456789abcdefghijklmnop';
+export const TOKEN = 'test-github-token-0123456789abcdefghijklmnop';
 
 export const testConfig: Config = {
   githubToken: TOKEN,

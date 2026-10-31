@@ -26,7 +26,7 @@ type Params = Anthropic.Beta.Messages.MessageCreateParamsNonStreaming;
 type Message = Anthropic.Beta.Messages.BetaMessage;
 type Block = Record<string, unknown>;
 
-const API_KEY = 'sk-ant-TESTKEY0123456789';
+const API_KEY = 'test-anthropic-key-0123456789';
 const sheet = buildFactSheet(smallReport());
 
 const textBlock = (text: string): Block => ({ type: 'text', text, citations: null });

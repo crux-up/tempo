@@ -8,7 +8,7 @@ import {
 import { createGitHubClient } from '../../src/github/client.js';
 import type { Logger } from '../../src/logger.js';
 
-const TOKEN = 'ghp_supersecrettoken123';
+const TOKEN = 'test-github-token-supersecret123';
 const repo = { owner: 'acme', name: 'widgets' };
 
 type Call = { url: string; init: RequestInit; body: { query: string; variables: Record<string, unknown> } };
