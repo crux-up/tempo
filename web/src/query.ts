@@ -15,7 +15,6 @@ const dayMs = (date: string) => Date.parse(`${date}T00:00:00Z`);
 /** A real calendar day: `2026-02-30` parses in some engines but does not survive the round trip. */
 const isDate = (value: string) => DATE.test(value) && !Number.isNaN(dayMs(value)) && isoDay(dayMs(value)) === value;
 
-export const today = () => isoDay(Date.now());
 export const addDays = (date: string, days: number) => isoDay(dayMs(date) + days * DAY_MS);
 export const daysInclusive = (from: string, to: string) => Math.round((dayMs(to) - dayMs(from)) / DAY_MS) + 1;
 

@@ -17,7 +17,7 @@ const NARRATIVE_FLAG = '--narrative';
 /**
  * Syncs a repository for a window, so the first dashboard request does not pay for it. With --narrative it also
  * generates the narrative for the same window (and so caches it); that needs ANTHROPIC_API_KEY. Pass the `from` and
- * `to` the dashboard sends, or neither, to warm the entry the dashboard will ask for.
+ * `to` the dashboard sends (see README). With neither, it warms the API's 30-day default window, not the dashboard's.
  */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);

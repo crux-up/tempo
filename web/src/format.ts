@@ -47,13 +47,13 @@ export const windowStart = (iso: string) => (atMidnight(iso) ? day(iso) : dateTi
 /** The exclusive end shown as the last included day, like the top bar; an end that is not a midnight is shown exactly. */
 export const windowEnd = (iso: string) => (atMidnight(iso) ? day(new Date(Date.parse(iso) - DAY_MS).toISOString()) : dateTime(iso));
 
+/** Yes/no context facts are counts of 0 or 1 whose label ends with this marker. */
+const YES_NO = /\s*\(1 = yes, 0 = no\)/;
+
 /**
  * Fact-sheet labels are written for the model ("Median hours to first review", "(fraction 0-1)"). On screen the value
  * carries its own unit, so the label drops the unit words.
  */
-/** Yes/no context facts are counts of 0 or 1 whose label ends with this marker. */
-const YES_NO = /\s*\(1 = yes, 0 = no\)/;
-
 export function evidenceLabel(label: string): string {
   return label
     .replace(YES_NO, '')
