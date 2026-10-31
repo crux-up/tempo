@@ -31,6 +31,8 @@ type NarrativeDeps = {
   logger: Logger;
   /** Model calls allowed per rolling hour across all requests; cached and empty narratives do not count. */
   maxGenerationsPerHour: number;
+  /** Model calls allowed per rolling hour for one client key. */
+  maxGenerationsPerClientPerHour: number;
   now?: () => Date;
 };
 
@@ -44,23 +46,24 @@ const NO_MODEL = 'none';
 const HOUR_MS = 3_600_000;
 
 /** At most `max` events in any rolling hour. */
-class HourlyBudget {
+class HourlyLimit {
   private readonly taken: number[] = [];
 
-  constructor(
-    private readonly max: number,
-    private readonly now: () => number,
-  ) {}
+  constructor(private readonly max: number) {}
 
-  /** Records one event, or throws NarrativeBudgetError with the seconds until the oldest one leaves the hour. */
-  take(): void {
-    const at = this.now();
+  /** Seconds until an event fits at `at`, or null when one fits now. Forgets events older than an hour. */
+  waitSeconds(at: number): number | null {
     while (this.taken.length > 0 && (this.taken[0] as number) <= at - HOUR_MS) this.taken.shift();
-    if (this.taken.length >= this.max) {
-      const freeAt = (this.taken[0] as number) + HOUR_MS;
-      throw new NarrativeBudgetError(Math.max(1, Math.ceil((freeAt - at) / 1000)));
-    }
+    if (this.taken.length < this.max) return null;
+    return Math.max(1, Math.ceil(((this.taken[0] as number) + HOUR_MS - at) / 1000));
+  }
+
+  record(at: number): void {
     this.taken.push(at);
+  }
+
+  get idle(): boolean {
+    return this.taken.length === 0;
   }
 }
 
@@ -92,14 +95,21 @@ const reportContext = (report: ReviewFlowReport) => ({
  */
 export class NarrativeService {
   private readonly inFlight = new Map<string, Promise<StoredBody>>();
-  private readonly budget: HourlyBudget;
+  private readonly shared: HourlyLimit;
+  private readonly perClient = new Map<string, HourlyLimit>();
+  private readonly now: () => Date;
 
   constructor(private readonly deps: NarrativeDeps) {
-    const now = deps.now ?? (() => new Date());
-    this.budget = new HourlyBudget(deps.maxGenerationsPerHour, () => now().getTime());
+    this.now = deps.now ?? (() => new Date());
+    this.shared = new HourlyLimit(deps.maxGenerationsPerHour);
   }
 
-  async getNarrative(repo: RepoRef, query: NarrativeQuery): Promise<NarrativeResponse> {
+  /**
+   * `client` is the key a model call is charged to (the client address, see `clientKey`). A new narrative first
+   * needs room in that client's hourly limit, then in the shared one, so no single client can use up the shared
+   * budget; a refused request is charged to neither.
+   */
+  async getNarrative(repo: RepoRef, query: NarrativeQuery, client = 'local'): Promise<NarrativeResponse> {
     const startedAt = performance.now();
     const { refresh, ...reportQuery } = query;
     const report = await this.deps.reviewFlow.getDailyReport(repo, reportQuery);
@@ -119,11 +129,27 @@ export class NarrativeService {
     let pending = this.inFlight.get(key);
     if (!pending) {
       // Counted when the model call starts: a failed call costs as much as one that succeeds.
-      this.budget.take();
+      this.charge(client);
       pending = this.generate(key, report, sheet, startedAt).finally(() => this.inFlight.delete(key));
       this.inFlight.set(key, pending);
     }
     return { ...(await pending), cached: false };
+  }
+
+  /** Records one model call against `client` and the shared limit, or throws when either is used up. */
+  private charge(client: string): void {
+    const at = this.now().getTime();
+    for (const [key, limit] of this.perClient) {
+      if (limit.waitSeconds(at) === null && limit.idle) this.perClient.delete(key);
+    }
+    const own = this.perClient.get(client) ?? new HourlyLimit(this.deps.maxGenerationsPerClientPerHour);
+    const ownWait = own.waitSeconds(at);
+    if (ownWait !== null) throw new NarrativeBudgetError(ownWait, 'client');
+    const sharedWait = this.shared.waitSeconds(at);
+    if (sharedWait !== null) throw new NarrativeBudgetError(sharedWait, 'server');
+    own.record(at);
+    this.perClient.set(client, own);
+    this.shared.record(at);
   }
 
   /** The cached body for `key`, or null when absent or no longer valid for the response schema. */

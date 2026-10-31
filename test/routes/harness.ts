@@ -25,6 +25,7 @@ export const testConfig: Config = {
   syncMaxPages: 40,
   syncMaxSeconds: 25,
   narrativeMaxPerHour: 30,
+  narrativeMaxPerClientPerHour: 10,
   allowedHosts: ['localhost', '127.0.0.1'],
   trustProxy: false,
   logLevel: 'info',
@@ -88,6 +89,7 @@ export async function createHarness(
     webRoot?: string;
     narrativeModel?: NarrativeModel;
     narrativeMaxPerHour?: number;
+    narrativeMaxPerClientPerHour?: number;
     config?: Partial<Config>;
   } = {},
 ): Promise<Harness> {
@@ -116,6 +118,7 @@ export async function createHarness(
         reviewFlow,
         logger,
         maxGenerationsPerHour: opts.narrativeMaxPerHour ?? testConfig.narrativeMaxPerHour,
+        maxGenerationsPerClientPerHour: opts.narrativeMaxPerClientPerHour ?? testConfig.narrativeMaxPerClientPerHour,
         now: () => clock.now,
       })
     : null;

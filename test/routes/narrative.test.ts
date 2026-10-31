@@ -153,6 +153,24 @@ describe('GET /api/v1/repos/:owner/:repo/review-flow/narrative', () => {
     expect(res.headers['retry-after']).toBe('3600');
   });
 
+  it('charges new narratives to the client address, so one client cannot spend the shared budget alone', async () => {
+    model = new FakeNarrativeModel();
+    h = await createHarness({ narrativeModel: model, narrativeMaxPerClientPerHour: 1 });
+    const from = (ip: string, url: string) => h.app.inject({ method: 'GET', url, remoteAddress: ip });
+    expect((await from('203.0.113.7', `${PATH}?${WINDOW_QS}`)).statusCode).toBe(200);
+
+    const refused = await from('203.0.113.7', `${PATH}?${WINDOW_QS}&refresh=true`);
+
+    expectProblem(refused, 429, 'narrative-budget-exhausted');
+    expect(refused.headers['retry-after']).toBe('3600');
+    expect((await from('203.0.113.8', `${PATH}?${WINDOW_QS}&refresh=true`)).statusCode).toBe(200);
+  });
+
+  it('rejects a window that holds no whole UTC day', async () => {
+    await start();
+    expectProblem(await get(`${PATH}?from=2026-03-10T01:00:00Z&to=2026-03-10T20:00:00Z`), 400, 'invalid-request');
+  });
+
   it('rejects a window that starts more than two years ago', async () => {
     await start();
     expectProblem(await get(`${PATH}?from=2024-03-01&to=2024-04-01`), 400, 'invalid-request');

@@ -16,6 +16,7 @@ describe('loadConfig', () => {
       syncMaxPages: 40,
       syncMaxSeconds: 25,
       narrativeMaxPerHour: 30,
+      narrativeMaxPerClientPerHour: 10,
       allowedHosts: ['localhost', '127.0.0.1'],
       trustProxy: false,
       logLevel: 'info',
@@ -27,6 +28,13 @@ describe('loadConfig', () => {
     expect(config.allowedHosts).toEqual(['tempo.example', '10.0.0.5', '::1']);
     expect(() => loadConfig({ GITHUB_TOKEN: 'x', ALLOWED_HOSTS: 'ok.example,bad host' })).toThrow(/ALLOWED_HOSTS/);
     expect(() => loadConfig({ GITHUB_TOKEN: 'x', ALLOWED_HOSTS: ',' })).toThrow(/ALLOWED_HOSTS/);
+  });
+
+  it('reads NARRATIVE_MAX_PER_CLIENT_PER_HOUR as a positive integer', () => {
+    expect(loadConfig({ GITHUB_TOKEN: 'x', NARRATIVE_MAX_PER_CLIENT_PER_HOUR: '3' }).narrativeMaxPerClientPerHour).toBe(3);
+    expect(() => loadConfig({ GITHUB_TOKEN: 'x', NARRATIVE_MAX_PER_CLIENT_PER_HOUR: '-1' })).toThrow(
+      /NARRATIVE_MAX_PER_CLIENT_PER_HOUR/,
+    );
   });
 
   it('reads TRUST_PROXY as true or false only', () => {

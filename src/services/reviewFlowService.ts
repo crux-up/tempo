@@ -1,6 +1,7 @@
 import type { Store } from '../db/store.js';
 import type { RepoRef, ReviewFlowQuery, ReviewFlowReport, TimeWindow } from '../domain/types.js';
 import { DAY_MS, DEFAULT_WINDOW_DAYS, parseWindow } from '../domain/window.js';
+import { BadRequestError } from '../errors.js';
 import { computeReviewFlow } from '../metrics/reviewFlow.js';
 import { coverageOf, type SyncResult, type SyncService } from '../sync/syncService.js';
 
@@ -51,40 +52,44 @@ export class ReviewFlowService {
   }
 
   /**
-   * A report whose window and facts stay the same for a whole UTC day, for results cached per fact sheet.
+   * A report over whole UTC days whose facts stay the same for a whole day, for results cached per fact sheet:
+   * shifting a bound by seconds cannot make a new cache entry.
    *
-   * An open-ended window (no `to`, or `to` later than `dataAsOf`) ends at the latest UTC midnight at or before
-   * `dataAsOf`, and the report is measured at that instant, so ages of waiting PRs do not grow between syncs. A
-   * defaulted `from` is that end minus 30 days. If that start falls before the synced data while the synced range
-   * did cover the request, `from` is raised to the start of the synced data instead of flagging the report partial;
-   * that start only moves when a backfill extends it. An explicit `to` that the data reaches is used as given.
-   * Exactly one sync runs per call.
+   * An explicit `from` and an explicit `to` that the data reaches are floored to UTC midnight. An open-ended window
+   * (no `to`, or `to` later than `dataAsOf`) ends at the latest UTC midnight at or before `dataAsOf` and is measured
+   * at that instant, so ages of waiting PRs do not grow between syncs; an explicit window is measured at `dataAsOf`. A
+   * defaulted `from` is the end minus 30 days; for an open-ended window, when that start falls before the synced data
+   * while the synced range did cover the request, it is raised to the start of the synced data instead of flagging
+   * the report partial (that start only moves when a backfill extends it). Exactly one sync runs per call. Throws
+   * BadRequestError when the window holds no whole day.
    */
   async getDailyReport(repo: RepoRef, query: ReviewFlowQuery): Promise<ReviewFlowReport> {
     const now = this.now();
     const requested = parseWindow(query, now);
     const openRequest = requested.to.getTime() === now.getTime();
+    const dayTo = startOfUtcDay(requested.to.getTime());
     // Sync from a midnight, so the start of the synced data does not creep back with every request of the day.
-    const syncWindow =
-      openRequest && query.from === undefined
-        ? { from: new Date(startOfUtcDay(now.getTime()) - DEFAULT_WINDOW_MS), to: requested.to }
-        : requested;
-    const synced = await this.deps.sync.ensureSynced(repo, syncWindow);
+    let syncFrom = startOfUtcDay(requested.from.getTime());
+    if (query.from === undefined) syncFrom = (openRequest ? startOfUtcDay(now.getTime()) : dayTo) - DEFAULT_WINDOW_MS;
+    const synced = await this.deps.sync.ensureSynced(repo, { from: new Date(syncFrom), to: requested.to });
 
     const snapshot = Date.parse(synced.dataAsOf);
+    if (Number.isNaN(snapshot)) return this.build(synced, requested, query, now);
     const openEnded = query.to === undefined || requested.to.getTime() > snapshot;
-    if (!openEnded || Number.isNaN(snapshot)) return this.build(synced, requested, query, now);
-
-    const to = startOfUtcDay(snapshot);
-    let from = requested.from.getTime();
+    const to = openEnded ? startOfUtcDay(snapshot) : dayTo;
+    let from = syncFrom;
     if (query.from === undefined) {
       const defaultFrom = to - DEFAULT_WINDOW_MS;
       const syncedFrom = synced.repo.syncedFrom === null ? Number.NaN : Date.parse(synced.repo.syncedFrom);
-      from = !synced.coverage.partial && !Number.isNaN(syncedFrom) ? Math.max(defaultFrom, syncedFrom) : defaultFrom;
+      const clamp = openEnded && !synced.coverage.partial && !Number.isNaN(syncedFrom);
+      from = clamp ? Math.max(defaultFrom, syncedFrom) : defaultFrom;
     }
-    if (from >= to) return this.build(synced, requested, query, now);
+    if (from >= to) {
+      throw new BadRequestError('A narrative covers whole UTC days: the window must contain at least one synced day');
+    }
     const day = { from: new Date(from), to: new Date(to) };
-    return this.build(synced, day, query, day.to);
+    // An explicit window is measured at dataAsOf like any report, so its facts match the metrics endpoint.
+    return this.build(synced, day, query, openEnded ? day.to : now);
   }
 
   /** Metrics for `window` measured at `dataAsOf`, or at `cap` when that is earlier. Coverage is for this window. */

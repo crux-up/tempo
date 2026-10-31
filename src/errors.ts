@@ -109,8 +109,12 @@ export class NarrativeBudgetError extends AppError {
   readonly status = 429;
   readonly type = `${PROBLEM_BASE}narrative-budget-exhausted`;
   readonly title = 'Narrative budget exhausted';
-  constructor(retryAfterSeconds: number) {
-    super(`The server's hourly budget of new narratives is used up; retry in ${retryAfterSeconds} seconds`);
+  constructor(retryAfterSeconds: number, scope: 'client' | 'server') {
+    const whose =
+      scope === 'client'
+        ? 'The hourly budget of new narratives for this client'
+        : "The server's hourly budget of new narratives";
+    super(`${whose} is used up; retry in ${retryAfterSeconds} seconds`);
     this.retryAfterSeconds = retryAfterSeconds;
   }
 }

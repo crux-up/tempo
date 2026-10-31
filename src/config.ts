@@ -14,6 +14,8 @@ export type Config = {
   syncMaxSeconds: number;
   /** New (uncached) narratives allowed per rolling hour, across all clients. */
   narrativeMaxPerHour: number;
+  /** New narratives one client (address, IPv6 by /64) may cause per rolling hour, within the shared budget. */
+  narrativeMaxPerClientPerHour: number;
   /** Host names (any port) the server answers to; anything else is refused, which stops DNS rebinding. */
   allowedHosts: string[];
   /** Trust X-Forwarded-* headers: set only behind a reverse proxy that writes them. */
@@ -60,6 +62,7 @@ const envSchema = z.object({
   SYNC_MAX_PAGES: positiveInt(40),
   SYNC_MAX_SECONDS: positiveInt(25),
   NARRATIVE_MAX_PER_HOUR: positiveInt(30),
+  NARRATIVE_MAX_PER_CLIENT_PER_HOUR: positiveInt(10),
   ALLOWED_HOSTS: hostList('localhost,127.0.0.1'),
   TRUST_PROXY: z.preprocess(blankToUndefined, z.enum(['true', 'false']).default('false')),
   LOG_LEVEL: z.preprocess(
@@ -90,6 +93,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     syncMaxPages: e.SYNC_MAX_PAGES,
     syncMaxSeconds: e.SYNC_MAX_SECONDS,
     narrativeMaxPerHour: e.NARRATIVE_MAX_PER_HOUR,
+    narrativeMaxPerClientPerHour: e.NARRATIVE_MAX_PER_CLIENT_PER_HOUR,
     allowedHosts: e.ALLOWED_HOSTS,
     trustProxy: e.TRUST_PROXY === 'true',
     logLevel: e.LOG_LEVEL,

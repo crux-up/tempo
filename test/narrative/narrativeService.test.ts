@@ -2,7 +2,7 @@ import type { Database } from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../../src/db/database.js';
 import { Store } from '../../src/db/store.js';
-import { LlmError, NarrativeBudgetError } from '../../src/errors.js';
+import { BadRequestError, LlmError, NarrativeBudgetError } from '../../src/errors.js';
 import type { Logger } from '../../src/logger.js';
 import { NarrativeService } from '../../src/narrative/narrativeService.js';
 import { PROMPT_VERSION } from '../../src/narrative/prompt.js';
@@ -33,7 +33,7 @@ const logger: Logger = {
   warn: (obj, msg) => logs.push({ level: 'warn', obj: obj as Record<string, unknown>, msg }),
 };
 
-const build = (modelName = 'claude-opus-5-5', maxGenerationsPerHour = 30) =>
+const build = (modelName = 'claude-opus-5-5', maxGenerationsPerHour = 30, maxGenerationsPerClientPerHour = 10) =>
   new NarrativeService({
     model,
     modelName,
@@ -41,6 +41,7 @@ const build = (modelName = 'claude-opus-5-5', maxGenerationsPerHour = 30) =>
     reviewFlow: new ReviewFlowService({ store, sync, now: () => now }),
     logger,
     maxGenerationsPerHour,
+    maxGenerationsPerClientPerHour,
     now: () => now,
   });
 
@@ -215,10 +216,21 @@ describe('NarrativeService', () => {
     expect(res.window.to).toBe(MIDNIGHT);
   });
 
-  it('keeps an explicit to that the data snapshot reaches', async () => {
-    const res = await service.getNarrative(REPO, { from: '2026-03-02', to: '2026-03-19T12:00:00Z' });
+  it('floors explicit window bounds to whole UTC days, so shifting them by seconds hits the same cache entry', async () => {
+    const first = await service.getNarrative(REPO, ACTIVE);
+    const shifted = await service.getNarrative(REPO, { from: '2026-03-02T05:00:01Z', to: '2026-03-16T23:59:59Z' });
 
-    expect(res.window).toEqual({ from: '2026-03-02T00:00:00.000Z', to: '2026-03-19T12:00:00.000Z' });
+    expect(shifted).toMatchObject({ cached: true, window: first.window });
+    expect(first.window).toEqual({ from: '2026-03-02T00:00:00.000Z', to: '2026-03-16T00:00:00.000Z' });
+    expect(model.calls).toBe(1);
+  });
+
+  it('rejects a window that holds no whole UTC day of data', async () => {
+    await expect(
+      service.getNarrative(REPO, { from: '2026-03-10T01:00:00Z', to: '2026-03-10T20:00:00Z' }),
+    ).rejects.toBeInstanceOf(BadRequestError);
+    await expect(service.getNarrative(REPO, { from: '2026-03-19' })).rejects.toBeInstanceOf(BadRequestError);
+    expect(model.calls).toBe(0);
   });
 
   it('syncs exactly once per request, even for a partially synced open-ended window', async () => {
@@ -291,6 +303,24 @@ describe('NarrativeService', () => {
     await expect(service.getNarrative(REPO, { ...ACTIVE, includeBots: 'true' })).resolves.toMatchObject({
       cached: false,
     });
+  });
+
+  it('limits new generations per client before charging the shared budget', async () => {
+    service = build('claude-opus-5-5', 2, 1);
+    await service.getNarrative(REPO, ACTIVE, 'client-a');
+
+    const refused = await service.getNarrative(REPO, { ...ACTIVE, refresh: 'true' }, 'client-a').catch((e: unknown) => e);
+
+    expect(refused).toBeInstanceOf(NarrativeBudgetError);
+    expect((refused as NarrativeBudgetError).retryAfterSeconds).toBe(3600);
+    expect((refused as NarrativeBudgetError).message).toContain('this client');
+    // The refused request spent nothing from the shared budget: a second client still gets the last slot.
+    await expect(service.getNarrative(REPO, { ...ACTIVE, refresh: 'true' }, 'client-b')).resolves.toMatchObject({
+      cached: false,
+    });
+    const shared = await service.getNarrative(REPO, { ...ACTIVE, refresh: 'true' }, 'client-c').catch((e: unknown) => e);
+    expect((shared as NarrativeBudgetError).message).toContain("server's");
+    expect(model.calls).toBe(2);
   });
 
   it('logs cache misses and hits with verification counts and token usage', async () => {

@@ -1,5 +1,6 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { NotConfiguredError } from '../errors.js';
+import { clientKey } from '../http/clientKey.js';
 import { NarrativeQuerySchema, RepoParams } from '../http/params.js';
 import { jsonResponse, problemResponse } from '../http/problem.js';
 import type { NarrativeService } from '../narrative/narrativeService.js';
@@ -25,7 +26,9 @@ export const narrativeRoutes: FastifyPluginAsyncZod<{ narrative: NarrativeServic
           'whole day; a defaulted `from` is 30 days before that end. An ' +
           'uncached request waits for the model and can take up to about 150 seconds before it succeeds or fails ' +
           `with 502. Limited to ${NARRATIVE_RATE_LIMIT_PER_MINUTE} requests per minute per client, and to ` +
-          'NARRATIVE_MAX_PER_HOUR new (uncached) narratives per hour across all clients.',
+          'NARRATIVE_MAX_PER_CLIENT_PER_HOUR new (uncached) narratives per hour per client and ' +
+          'NARRATIVE_MAX_PER_HOUR across all clients. Explicit `from` and `to` are floored to UTC midnight, so a ' +
+          'narrative covers whole days; a window without one whole day of synced data is rejected with 400.',
         tags: ['metrics'],
         params: RepoParams,
         querystring: NarrativeQuerySchema,
@@ -34,8 +37,9 @@ export const narrativeRoutes: FastifyPluginAsyncZod<{ narrative: NarrativeServic
           400: problemResponse('Invalid repository path or query parameters'),
           404: problemResponse('Repository not found or not accessible'),
           429: problemResponse(
-            'Client rate limit exceeded, or the server-wide hourly budget of new narratives ' +
-              '(NARRATIVE_MAX_PER_HOUR) is used up; see Retry-After',
+            'Client rate limit exceeded, or the hourly budget of new narratives for this client ' +
+              '(NARRATIVE_MAX_PER_CLIENT_PER_HOUR) or for the server (NARRATIVE_MAX_PER_HOUR) is used up; ' +
+              'see Retry-After',
           ),
           502: problemResponse('GitHub or the language model returned an error, or the model declined'),
           503: problemResponse(
@@ -50,7 +54,8 @@ export const narrativeRoutes: FastifyPluginAsyncZod<{ narrative: NarrativeServic
         throw new NotConfiguredError('Narratives are disabled: set ANTHROPIC_API_KEY to enable them');
       }
       const { owner, repo } = request.params;
-      const narrative = await opts.narrative.getNarrative({ owner, name: repo }, request.query);
+      const client = clientKey(request.ip);
+      const narrative = await opts.narrative.getNarrative({ owner, name: repo }, request.query, client);
       return reply.header('cache-control', 'private, max-age=60').send(narrative);
     },
   );
