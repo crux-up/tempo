@@ -14,6 +14,8 @@ import { FakeNarrativeModel } from './fakes.js';
 const REPO = { owner: 'fastify', name: 'fastify' };
 const ACTIVE = { from: '2026-03-02', to: '2026-03-16' };
 const QUIET = { from: '2025-01-01', to: '2025-02-01' };
+/** The last UTC midnight at or before DATA_AS_OF. */
+const MIDNIGHT = '2026-03-19T00:00:00.000Z';
 
 type LogLine = { level: 'debug' | 'info' | 'warn'; obj: Record<string, unknown>; msg?: string };
 
@@ -149,47 +151,82 @@ describe('NarrativeService', () => {
     expect(model.calls).toBe(2);
   });
 
-  it('snaps an open-ended window to the data snapshot so repeated requests hit the cache', async () => {
+  it('ends an open-ended window at the last UTC midnight at or before the data snapshot', async () => {
     const first = await service.getNarrative(REPO, {});
     now = new Date(AS_OF.getTime() + 60_000);
     const second = await service.getNarrative(REPO, {});
 
     // The default from (to - 30 days) would start before the synced data, so it is clamped to the synced start.
-    expect(first.window).toEqual({ from: '2026-02-18T00:00:00.000Z', to: DATA_AS_OF });
-    expect(first.coverage.partial).toBe(false);
+    expect(first.window).toEqual({ from: '2026-02-18T00:00:00.000Z', to: MIDNIGHT });
+    expect(first.coverage).toEqual({ partial: false, from: '2026-02-18T00:00:00.000Z', to: MIDNIGHT });
+    expect(first.dataAsOf).toBe(DATA_AS_OF);
     expect(second).toMatchObject({ cached: true, window: first.window });
     expect(model.calls).toBe(1);
   });
 
-  it('starts a snapped default window 30 days before the snapshot when the synced data reaches back that far', async () => {
+  it('keeps the facts and the cache entry for the whole day across re-syncs', async () => {
+    now = new Date('2026-03-19T10:00:00.000Z');
+    sync.dataAsOf = '2026-03-19T09:55:00.000Z';
+    const morning = await service.getNarrative(REPO, {});
+    now = new Date('2026-03-19T16:00:00.000Z');
+    sync.dataAsOf = '2026-03-19T15:58:00.000Z';
+
+    const afternoon = await service.getNarrative(REPO, {});
+
+    expect(model.calls).toBe(1);
+    expect(afternoon).toMatchObject({ cached: true, window: morning.window, dataAsOf: '2026-03-19T15:58:00.000Z' });
+    expect(morning.window).toEqual({ from: '2026-02-17T00:00:00.000Z', to: MIDNIGHT });
+    // Ages of PRs awaiting review are measured at the window end: PR 5 (opened 03-13 09:00) is 135 h old at midnight.
+    const awaitingAge = model.sheets[0]?.facts.find((f) => f.id === 'team.awaitingFirstReview.medianAgeHours');
+    expect(awaitingAge?.value).toBe(135);
+  });
+
+  it('starts a new window and cache entry on the next day', async () => {
+    await service.getNarrative(REPO, {});
+    now = new Date('2026-03-20T09:00:00.000Z');
+    sync.dataAsOf = '2026-03-20T08:59:00.000Z';
+
+    const next = await service.getNarrative(REPO, {});
+
+    expect(next).toMatchObject({ cached: false, window: { to: '2026-03-20T00:00:00.000Z' } });
+    expect(model.calls).toBe(2);
+  });
+
+  it('starts a defaulted window 30 days before its end when the synced data reaches back that far', async () => {
     sync.syncedFrom = '2026-01-01T00:00:00.000Z';
 
     const res = await service.getNarrative(REPO, {});
 
-    expect(res.window).toEqual({ from: '2026-02-17T23:50:00.000Z', to: DATA_AS_OF });
+    expect(res.window).toEqual({ from: '2026-02-17T00:00:00.000Z', to: MIDNIGHT });
     expect(res.coverage.partial).toBe(false);
   });
 
-  it('keeps an explicit from when snapping an open-ended to', async () => {
+  it('keeps an explicit from when ending an open-ended window at midnight', async () => {
     const res = await service.getNarrative(REPO, { from: '2026-03-02' });
 
-    expect(res.window).toEqual({ from: '2026-03-02T00:00:00.000Z', to: DATA_AS_OF });
+    expect(res.window).toEqual({ from: '2026-03-02T00:00:00.000Z', to: MIDNIGHT });
   });
 
-  it('snaps a to later than the data snapshot', async () => {
-    const res = await service.getNarrative(REPO, { from: '2026-03-02', to: '2026-03-20' });
+  it('treats a to later than the data snapshot as open-ended', async () => {
+    const res = await service.getNarrative(REPO, { from: '2026-03-02', to: '2026-03-21' });
 
-    expect(res.window.to).toBe(DATA_AS_OF);
+    expect(res.window.to).toBe(MIDNIGHT);
   });
 
-  it('syncs exactly once per request, even when snapping a partially synced open-ended window', async () => {
+  it('keeps an explicit to that the data snapshot reaches', async () => {
+    const res = await service.getNarrative(REPO, { from: '2026-03-02', to: '2026-03-19T12:00:00Z' });
+
+    expect(res.window).toEqual({ from: '2026-03-02T00:00:00.000Z', to: '2026-03-19T12:00:00.000Z' });
+  });
+
+  it('syncs exactly once per request, even for a partially synced open-ended window', async () => {
     sync.syncedFrom = '2026-03-10T00:00:00.000Z';
 
     const res = await service.getNarrative(REPO, {});
 
     expect(sync.calls).toHaveLength(1);
-    expect(res.window.to).toBe(DATA_AS_OF);
-    expect(res.coverage).toEqual({ partial: true, from: '2026-03-10T00:00:00.000Z', to: DATA_AS_OF });
+    expect(res.window).toEqual({ from: '2026-02-17T00:00:00.000Z', to: MIDNIGHT });
+    expect(res.coverage).toEqual({ partial: true, from: '2026-03-10T00:00:00.000Z', to: MIDNIGHT });
   });
 
   it('syncs exactly once for an explicit window', async () => {

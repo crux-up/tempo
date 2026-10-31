@@ -1,8 +1,8 @@
 import type { Store } from '../db/store.js';
 import type { RepoRef, ReviewFlowQuery, ReviewFlowReport, TimeWindow } from '../domain/types.js';
-import { parseWindow } from '../domain/window.js';
+import { DAY_MS, DEFAULT_WINDOW_DAYS, parseWindow } from '../domain/window.js';
 import { computeReviewFlow } from '../metrics/reviewFlow.js';
-import { coverageOf, repoKey, type SyncResult, type SyncService } from '../sync/syncService.js';
+import { coverageOf, type SyncResult, type SyncService } from '../sync/syncService.js';
 
 type ReviewFlowDeps = {
   store: Store;
@@ -11,6 +11,9 @@ type ReviewFlowDeps = {
 };
 
 type WindowData = ReturnType<Store['loadWindowData']>;
+
+const DEFAULT_WINDOW_MS = DEFAULT_WINDOW_DAYS * DAY_MS;
+const startOfUtcDay = (ms: number) => ms - (((ms % DAY_MS) + DAY_MS) % DAY_MS);
 
 const after = (iso: string | null, asOf: Date) => iso !== null && Date.parse(iso) > asOf.getTime();
 
@@ -48,29 +51,54 @@ export class ReviewFlowService {
   }
 
   /**
-   * The same report from data already stored, with no sync: for a follow-up window right after `getReport` synced
-   * the repo, so one request never pays for two sync budgets. Coverage is recomputed for this window.
+   * A report whose window and facts stay the same for a whole UTC day, for results cached per fact sheet.
+   *
+   * An open-ended window (no `to`, or `to` later than `dataAsOf`) ends at the latest UTC midnight at or before
+   * `dataAsOf`, and the report is measured at that instant, so ages of waiting PRs do not grow between syncs. A
+   * defaulted `from` is that end minus 30 days. If that start falls before the synced data while the synced range
+   * did cover the request, `from` is raised to the start of the synced data instead of flagging the report partial;
+   * that start only moves when a backfill extends it. An explicit `to` that the data reaches is used as given.
+   * Exactly one sync runs per call.
    */
-  getStoredReport(repo: RepoRef, query: ReviewFlowQuery): ReviewFlowReport {
+  async getDailyReport(repo: RepoRef, query: ReviewFlowQuery): Promise<ReviewFlowReport> {
     const now = this.now();
-    const window = parseWindow(query, now);
-    const record = this.deps.store.getRepo(repoKey(repo));
-    if (!record?.syncedAt || !record.syncedFrom) throw new Error(`${repoKey(repo)} has not been synced`);
-    const synced = { repo: record, dataAsOf: record.syncedAt, coverage: coverageOf(record, window) };
-    return this.build(synced, window, query, now);
+    const requested = parseWindow(query, now);
+    const openRequest = requested.to.getTime() === now.getTime();
+    // Sync from a midnight, so the start of the synced data does not creep back with every request of the day.
+    const syncWindow =
+      openRequest && query.from === undefined
+        ? { from: new Date(startOfUtcDay(now.getTime()) - DEFAULT_WINDOW_MS), to: requested.to }
+        : requested;
+    const synced = await this.deps.sync.ensureSynced(repo, syncWindow);
+
+    const snapshot = Date.parse(synced.dataAsOf);
+    const openEnded = query.to === undefined || requested.to.getTime() > snapshot;
+    if (!openEnded || Number.isNaN(snapshot)) return this.build(synced, requested, query, now);
+
+    const to = startOfUtcDay(snapshot);
+    let from = requested.from.getTime();
+    if (query.from === undefined) {
+      const defaultFrom = to - DEFAULT_WINDOW_MS;
+      const syncedFrom = synced.repo.syncedFrom === null ? Number.NaN : Date.parse(synced.repo.syncedFrom);
+      from = !synced.coverage.partial && !Number.isNaN(syncedFrom) ? Math.max(defaultFrom, syncedFrom) : defaultFrom;
+    }
+    if (from >= to) return this.build(synced, requested, query, now);
+    const day = { from: new Date(from), to: new Date(to) };
+    return this.build(synced, day, query, day.to);
   }
 
-  private build(synced: SyncResult, window: TimeWindow, query: ReviewFlowQuery, now: Date): ReviewFlowReport {
+  /** Metrics for `window` measured at `dataAsOf`, or at `cap` when that is earlier. Coverage is for this window. */
+  private build(synced: SyncResult, window: TimeWindow, query: ReviewFlowQuery, cap: Date): ReviewFlowReport {
     const includeBots = query.includeBots === 'true';
     const snapshotMs = Date.parse(synced.dataAsOf);
-    const asOf = Number.isNaN(snapshotMs) ? now : new Date(Math.min(now.getTime(), snapshotMs));
+    const asOf = Number.isNaN(snapshotMs) ? cap : new Date(Math.min(cap.getTime(), snapshotMs));
     const data = snapshotAt(this.deps.store.loadWindowData(synced.repo.id, window, asOf), asOf);
     const metrics = computeReviewFlow({ ...data, window, asOf, includeBots });
     return {
       repo: `${synced.repo.owner}/${synced.repo.name}`,
       window: { from: window.from.toISOString(), to: window.to.toISOString() },
       dataAsOf: synced.dataAsOf,
-      coverage: synced.coverage,
+      coverage: coverageOf(synced.repo, window),
       includeBots,
       ...metrics,
     };

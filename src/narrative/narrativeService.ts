@@ -1,12 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { Store } from '../db/store.js';
 import { hasActivity } from '../domain/report.js';
-import type { Coverage, NarrativeQuery, RepoRef, ReviewFlowQuery, ReviewFlowReport } from '../domain/types.js';
-import { DAY_MS, DEFAULT_WINDOW_DAYS } from '../domain/window.js';
+import type { Coverage, NarrativeQuery, RepoRef, ReviewFlowReport } from '../domain/types.js';
 import type { Logger } from '../logger.js';
 import { ordinal } from '../metrics/stats.js';
 import type { ReviewFlowService } from '../services/reviewFlowService.js';
-import { repoKey } from '../sync/syncService.js';
 import { buildFactSheet, type FactSheet } from './factSheet.js';
 import type { NarrativeModel, TokenUsage } from './llmClient.js';
 import { PROMPT_VERSION } from './prompt.js';
@@ -28,7 +26,7 @@ type NarrativeDeps = {
   model: NarrativeModel;
   modelName: string;
   store: Store;
-  reviewFlow: Pick<ReviewFlowService, 'getReport' | 'getStoredReport'>;
+  reviewFlow: Pick<ReviewFlowService, 'getDailyReport'>;
   logger: Logger;
 };
 
@@ -38,8 +36,6 @@ const StoredBodySchema = NarrativeResponseSchema.omit({ cached: true });
 
 /** Reported as the model of a narrative that no model wrote. */
 const NO_MODEL = 'none';
-
-const DEFAULT_WINDOW_MS = DEFAULT_WINDOW_DAYS * DAY_MS;
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 
@@ -75,7 +71,7 @@ export class NarrativeService {
   async getNarrative(repo: RepoRef, query: NarrativeQuery): Promise<NarrativeResponse> {
     const startedAt = performance.now();
     const { refresh, ...reportQuery } = query;
-    const report = await this.snappedReport(repo, reportQuery);
+    const report = await this.deps.reviewFlow.getDailyReport(repo, reportQuery);
     if (!hasActivity(report.team)) return this.emptyNarrative(report);
 
     const sheet = buildFactSheet(report);
@@ -95,35 +91,6 @@ export class NarrativeService {
       this.inFlight.set(key, pending);
     }
     return { ...(await pending), cached: false };
-  }
-
-  /**
-   * The report for the request, with an open-ended `to` (absent, or later than the data snapshot) snapped to the
-   * snapshot time `dataAsOf`, and a defaulted `from` kept 30 days before it. Requests between syncs then resolve to
-   * the same window and share a cache entry. The second report is built from the data the first one just synced,
-   * without another sync, so a request spends at most one sync budget.
-   *
-   * Moving a defaulted window back by (now - dataAsOf) can start it just before the synced data, which would flag a
-   * fully synced request as partial. When the first report was fully covered, the snapped `from` is therefore
-   * clamped to the start of the synced data; that start only moves when a backfill extends it, so the window stays
-   * stable between syncs.
-   */
-  private async snappedReport(repo: RepoRef, query: ReviewFlowQuery): Promise<ReviewFlowReport> {
-    const report = await this.deps.reviewFlow.getReport(repo, query);
-    const snapshot = Date.parse(report.dataAsOf);
-    const openEnded = query.to === undefined || Date.parse(report.window.to) > snapshot;
-    if (!openEnded || Number.isNaN(snapshot) || report.window.to === report.dataAsOf) return report;
-
-    let from = query.from;
-    if (from === undefined) {
-      const syncedFrom = this.deps.store.getRepo(repoKey(repo))?.syncedFrom;
-      const defaultFrom = snapshot - DEFAULT_WINDOW_MS;
-      const clampTo = !report.coverage.partial && syncedFrom ? Date.parse(syncedFrom) : defaultFrom;
-      const start = Math.max(defaultFrom, clampTo);
-      from = new Date(start).toISOString();
-    }
-    if (Date.parse(from) >= snapshot) return report;
-    return this.deps.reviewFlow.getStoredReport(repo, { ...query, from, to: report.dataAsOf });
   }
 
   /** The cached body for `key`, or null when absent or no longer valid for the response schema. */
