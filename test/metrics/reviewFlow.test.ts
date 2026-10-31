@@ -92,6 +92,21 @@ describe('computeReviewFlow on the small repo fixture', () => {
     expect(metrics.people.map((p) => p.login)).toEqual(['bob', 'carol', 'alice', 'Erin Example', 'dave']);
   });
 
+  it('breaks full ties by ordinal login order, not locale order, so API and UI agree', () => {
+    const tied = (sha: string, login: string) => ({
+      sha,
+      authorLogin: login,
+      authorName: login,
+      authorIsBot: false,
+      committedAt: '2026-03-05T00:00:00Z',
+    });
+    const m = computeReviewFlow(
+      smallRepo({ pullRequests: [], reviews: [], commits: [tied('a', 'zoe'), tied('b', 'Zed'), tied('c', 'adam')] }),
+    );
+    // Ordinal: uppercase sorts before lowercase; localeCompare would give adam, Zed, zoe.
+    expect(m.people.map((p) => p.login)).toEqual(['Zed', 'adam', 'zoe']);
+  });
+
   it('builds one weekly entry per ISO week overlapping the window', () => {
     expect(metrics.weekly).toEqual([
       {
