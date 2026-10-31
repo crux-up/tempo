@@ -1,0 +1,18 @@
+# Planning notes (local only)
+docs/specs/
+
+# Assignment brief
+*.pdf
+
+# Dependencies and build output
+node_modules/
+dist/
+
+# Local data and secrets
+data/
+.env
+.env.*
+!.env.example
+
+# Tool working files
+.taste-skill/
