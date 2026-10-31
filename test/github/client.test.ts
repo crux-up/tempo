@@ -296,6 +296,28 @@ describe('pullRequestPages', () => {
     expect(page?.pullRequests.map((p) => p.authorIsBot)).toEqual([true, true, false]);
   });
 
+  it('adds the [bot] suffix to GraphQL Bot logins so a bot has the same login as on its commits', async () => {
+    const h = harness([
+      prPage(
+        [
+          rawPr('PR_1', {
+            author: { __typename: 'Bot', login: 'dependabot' },
+            reviews: {
+              pageInfo: { hasNextPage: false, endCursor: null },
+              nodes: [rawReview('R_1', { author: { __typename: 'Bot', login: 'copilot' } })],
+            },
+          }),
+          rawPr('PR_2', { author: { __typename: 'Bot', login: 'renovate[bot]' } }),
+        ],
+        false,
+        null,
+      ),
+    ]);
+    const [page] = await collect(h.client.pullRequestPages(repo));
+    expect(page?.pullRequests.map((p) => p.author)).toEqual(['dependabot[bot]', 'renovate[bot]']);
+    expect(page?.reviews.map((r) => r.reviewer)).toEqual(['copilot[bot]']);
+  });
+
   it('maps review fields and drops pending reviews', async () => {
     const h = harness([
       prPage(
@@ -321,7 +343,7 @@ describe('pullRequestPages', () => {
       {
         id: 'R_1',
         pullRequestId: 'PR_1',
-        reviewer: 'copilot',
+        reviewer: 'copilot[bot]',
         reviewerIsBot: true,
         state: 'CHANGES_REQUESTED',
         submittedAt: '2026-03-10T10:00:00Z',

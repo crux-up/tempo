@@ -42,9 +42,17 @@ const REVIEW_STATES: ReadonlySet<string> = new Set<ReviewState>([
   'DISMISSED',
 ]);
 
+/**
+ * GraphQL `Bot` actors have logins without the `[bot]` suffix that their commits carry (`dependabot` against
+ * `dependabot[bot]`). The suffix is added here, so one bot is one person across PRs, reviews and commits.
+ */
 function mapActor(actor: RawActor): { login: string; isBot: boolean } {
   if (!actor) return { login: GHOST, isBot: false };
-  return { login: actor.login, isBot: actor.__typename === 'Bot' || actor.login.endsWith(BOT_SUFFIX) };
+  if (actor.__typename === 'Bot') {
+    const login = actor.login.endsWith(BOT_SUFFIX) ? actor.login : `${actor.login}${BOT_SUFFIX}`;
+    return { login, isBot: true };
+  }
+  return { login: actor.login, isBot: actor.login.endsWith(BOT_SUFFIX) };
 }
 
 export function mapPullRequest(pr: RawPullRequest): PullRequestRow {
