@@ -50,15 +50,22 @@ const toMs = (iso: string) => new Date(iso).getTime();
 /** Store key of a repository: `owner/name`, lowercased. */
 export const repoKey = (repo: RepoRef) => `${repo.owner}/${repo.name}`.toLowerCase();
 
-/** The part of `window` backed by stored data, for a repo that has been synced at least once. */
+/**
+ * The part of `window` backed by stored data, for a repo that has been synced at least once. The bottom edge is
+ * `syncedFrom`. The top edge is the window end, except after a refresh cut short: the data then reaches only
+ * `syncedAt` (the response's `dataAsOf`). Coverage is partial when either edge falls short of the window.
+ */
 export function coverageOf(repo: RepoRecord, window: TimeWindow): Coverage {
   const syncedFrom = toMs(repo.syncedFrom as string);
   const windowFrom = window.from.getTime();
   const windowTo = window.to.getTime();
+  const to = repo.refreshIncomplete
+    ? Math.max(windowFrom, Math.min(windowTo, toMs(repo.syncedAt as string)))
+    : windowTo;
   return {
-    partial: syncedFrom > windowFrom,
-    from: toIso(Math.min(Math.max(windowFrom, syncedFrom), windowTo)),
-    to: toIso(windowTo),
+    partial: syncedFrom > windowFrom || to < windowTo,
+    from: toIso(Math.min(Math.max(windowFrom, syncedFrom), to)),
+    to: toIso(to),
   };
 }
 
@@ -154,11 +161,17 @@ export class SyncService {
     // syncedAt becomes this run's start, so PRs updated during the run are fetched again next time.
     const topContiguous = oldAt === null || topCovered <= oldAt;
     const syncedAt = topNeeded && topContiguous ? startedAt : (oldAt as number);
+    const refreshIncomplete = topNeeded ? !topContiguous : repo.refreshIncomplete;
     const syncedFrom = oldFrom === null ? topCovered : (bottomCovered as number);
     // A finished backfill clears the cursor, unless the commit pass fell short and the backfill must run again.
     let backfillCursor = repo.backfillCursor;
     if (backfill) backfillCursor = backfill.stopped || syncedFrom > windowFrom ? backfill.lastCursor : null;
-    store.markSynced(repo.id, { syncedFrom: toIso(syncedFrom), syncedAt: toIso(syncedAt), backfillCursor });
+    store.markSynced(repo.id, {
+      syncedFrom: toIso(syncedFrom),
+      syncedAt: toIso(syncedAt),
+      backfillCursor,
+      refreshIncomplete,
+    });
 
     const budgetHit = passes.some((p) => p.stopped);
     const log = { repo: key, pages: budget.pagesUsed, syncedFrom: toIso(syncedFrom), syncedAt: toIso(syncedAt) };

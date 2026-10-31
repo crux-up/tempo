@@ -66,22 +66,26 @@ describe('Store', () => {
     expect(again.defaultBranch).toBe('trunk');
     expect(again.syncedAt).toBeNull();
     expect(again.backfillCursor).toBeNull();
+    expect(again.refreshIncomplete).toBe(false);
     store.markSynced(repoId, {
       syncedFrom: '2026-01-01T00:00:00.000Z',
       syncedAt: '2026-04-01T00:00:00.000Z',
       backfillCursor: 'Y3Vyc29yOjE=',
+      refreshIncomplete: true,
     });
     expect(store.getRepo('acme/api')).toMatchObject({
       syncedFrom: '2026-01-01T00:00:00.000Z',
       syncedAt: '2026-04-01T00:00:00.000Z',
       backfillCursor: 'Y3Vyc29yOjE=',
+      refreshIncomplete: true,
     });
     store.markSynced(repoId, {
       syncedFrom: '2026-01-01T00:00:00.000Z',
       syncedAt: '2026-04-01T00:00:00.000Z',
       backfillCursor: null,
+      refreshIncomplete: false,
     });
-    expect(store.getRepo('acme/api')?.backfillCursor).toBeNull();
+    expect(store.getRepo('acme/api')).toMatchObject({ backfillCursor: null, refreshIncomplete: false });
   });
 
   it('keeps one row per pull request and stores the newer values', () => {

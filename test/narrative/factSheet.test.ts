@@ -229,5 +229,15 @@ describe('buildFactSheet context facts', () => {
     const sheet = buildFactSheet({ ...report, coverage });
     expect(fact(sheet, 'meta.coveragePartial').value).toBe(1);
     expect(fact(sheet, 'meta.coverageFrom')).toMatchObject({ value: '2026-03-09T00:00:00.000Z', unit: 'datetime' });
+    expect(sheet.facts.some((f) => f.id === 'meta.coverageTo')).toBe(false);
+  });
+
+  it('gives the instant up to which data is synced when a refresh was cut short', () => {
+    const report = smallReport();
+    const coverage = { partial: true, from: report.window.from, to: '2026-03-14T00:00:00.000Z' };
+    const sheet = buildFactSheet({ ...report, coverage });
+    expect(fact(sheet, 'meta.coveragePartial').value).toBe(1);
+    expect(fact(sheet, 'meta.coverageTo')).toMatchObject({ value: '2026-03-14T00:00:00.000Z', unit: 'datetime' });
+    expect(sheet.facts.some((f) => f.id === 'meta.coverageFrom')).toBe(false);
   });
 });

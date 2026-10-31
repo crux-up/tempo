@@ -326,6 +326,34 @@ describe('SyncService', () => {
     expect(stored.pullRequests.map((p) => p.number)).toContain(8);
   });
 
+  it('reports coverage up to dataAsOf as partial while a refresh cut short is not completed', async () => {
+    await service().ensureSynced(REPO, MARCH);
+    clock = new Date(T0.getTime() + 20 * 60_000);
+    github.prPages = [
+      page(pr(8, '2026-03-31T12:15:00.000Z')),
+      page(pr(7, '2026-03-31T12:10:00.000Z')),
+      page(pr(1, '2026-03-30T00:00:00.000Z')),
+    ];
+    const upToNow = { from: MARCH.from, to: clock };
+
+    const cut = await service({ maxPages: 1 }).ensureSynced(REPO, upToNow);
+
+    expect(cut.repo.refreshIncomplete).toBe(true);
+    expect(cut.coverage).toEqual({
+      partial: true,
+      from: '2026-03-01T00:00:00.000Z',
+      to: '2026-03-31T12:00:00.000Z',
+    });
+    // A window that ends before the last complete sync is still fully covered.
+    expect((await service({ maxPages: 1 }).ensureSynced(REPO, MARCH)).coverage).toMatchObject({ partial: false });
+
+    clock = new Date(clock.getTime() + 60_000);
+    const done = await service().ensureSynced(REPO, { from: MARCH.from, to: clock });
+
+    expect(done.repo).toMatchObject({ refreshIncomplete: false, syncedAt: clock.toISOString() });
+    expect(done.coverage).toEqual({ partial: false, from: '2026-03-01T00:00:00.000Z', to: clock.toISOString() });
+  });
+
   it('clamps coverage.from to window.to when coverage stops above the window', async () => {
     const february = { from: new Date('2026-02-01T00:00:00.000Z'), to: new Date('2026-02-10T00:00:00.000Z') };
 

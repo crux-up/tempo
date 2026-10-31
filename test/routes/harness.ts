@@ -56,6 +56,7 @@ export class FakeSync {
         syncedFrom: this.syncedFrom ?? earliest,
         syncedAt: this.dataAsOf,
         backfillCursor: null,
+        refreshIncomplete: false,
       });
     }
     const record = this.store.getRepo(key) as RepoRecord;

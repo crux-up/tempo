@@ -11,6 +11,8 @@ export type RepoRecord = {
   syncedAt: string | null;
   /** GitHub cursor after the last PR page an unfinished backfill stored; the next backfill resumes there. */
   backfillCursor: string | null;
+  /** The last sync run cut its refresh short: stored data is complete only up to `syncedAt`, not up to the run. */
+  refreshIncomplete: boolean;
 };
 
 type StoredNarrative = { body: unknown; model: string; promptVersion: string; createdAt: string };
@@ -24,6 +26,7 @@ type RepoDbRow = {
   synced_from: string | null;
   synced_at: string | null;
   backfill_cursor: string | null;
+  refresh_incomplete: number;
 };
 
 type PullRequestDbRow = {
@@ -77,6 +80,7 @@ const toRepo = (r: RepoDbRow): RepoRecord => ({
   syncedFrom: r.synced_from,
   syncedAt: r.synced_at,
   backfillCursor: r.backfill_cursor,
+  refreshIncomplete: r.refresh_incomplete === 1,
 });
 
 const toPullRequest = (r: PullRequestDbRow): PullRequestRow => ({
@@ -135,8 +139,8 @@ export class Store {
        RETURNING *`,
     );
 
-    this.updateSync = db.prepare<[string, string, string | null, number]>(
-      'UPDATE repos SET synced_from = ?, synced_at = ?, backfill_cursor = ? WHERE id = ?',
+    this.updateSync = db.prepare<[string, string, string | null, number, number]>(
+      'UPDATE repos SET synced_from = ?, synced_at = ?, backfill_cursor = ?, refresh_incomplete = ? WHERE id = ?',
     );
 
     this.insertPullRequest = db.prepare(
@@ -277,8 +281,11 @@ export class Store {
     return toRepo(row);
   }
 
-  markSynced(repoId: number, p: { syncedFrom: string; syncedAt: string; backfillCursor: string | null }): void {
-    this.updateSync.run(iso(p.syncedFrom), iso(p.syncedAt), p.backfillCursor, repoId);
+  markSynced(
+    repoId: number,
+    p: { syncedFrom: string; syncedAt: string; backfillCursor: string | null; refreshIncomplete: boolean },
+  ): void {
+    this.updateSync.run(iso(p.syncedFrom), iso(p.syncedAt), p.backfillCursor, p.refreshIncomplete ? 1 : 0, repoId);
   }
 
   upsertPullRequests(repoId: number, prs: PullRequestRow[], reviews: ReviewRow[]): void {

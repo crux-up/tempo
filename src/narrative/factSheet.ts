@@ -165,11 +165,19 @@ function metaFacts(report: ReviewFlowReport): Fact[] {
       unit: 'count',
     },
   ];
-  if (report.coverage.partial) {
+  if (report.coverage.from > report.window.from) {
     facts.push({
       id: 'meta.coverageFrom',
       label: 'Start of the synced data; the window before this instant is missing',
       value: report.coverage.from,
+      unit: 'datetime',
+    });
+  }
+  if (report.coverage.to < report.window.to) {
+    facts.push({
+      id: 'meta.coverageTo',
+      label: 'End of the synced data (a refresh was cut short); the window after this instant is missing',
+      value: report.coverage.to,
       unit: 'datetime',
     });
   }

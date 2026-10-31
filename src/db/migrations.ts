@@ -71,6 +71,9 @@ export const MIGRATIONS: readonly string[] = [
   ALTER TABLE commits DROP COLUMN additions;
   ALTER TABLE commits DROP COLUMN deletions;
   `,
+  `
+  ALTER TABLE repos ADD COLUMN refresh_incomplete INTEGER NOT NULL DEFAULT 0 CHECK (refresh_incomplete IN (0, 1));
+  `,
 ];
 
 export function migrate(db: Database): void {
