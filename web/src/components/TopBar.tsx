@@ -16,7 +16,8 @@ export function TopBar({ scope }: { scope: string }) {
           <Mark />
           <span className="brand-name">Tempo</span>
         </a>
-        <span className="topbar-scope" aria-label="Current scope">
+        <span className="topbar-scope">
+          <span className="sr-only">Scope: </span>
           {scope}
         </span>
         <nav className="topbar-links" aria-label="Resources">

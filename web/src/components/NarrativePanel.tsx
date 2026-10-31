@@ -45,8 +45,8 @@ function Chips({ evidence, ...citing }: { evidence: Evidence[] } & Citing) {
   if (evidence.length === 0) return null;
   return (
     <ul className="chips" aria-label="Evidence">
-      {evidence.map((item) => (
-        <li key={item.factId}>
+      {evidence.map((item, index) => (
+        <li key={`${item.factId}-${index}`}>
           <Chip evidence={item} {...citing} />
         </li>
       ))}
@@ -106,10 +106,11 @@ function Verification({ narrative }: { narrative: Narrative }) {
   );
 }
 
-type ResultProps = { narrative: Narrative; onRegenerate?: () => void } & Citing;
+type ResultProps = { narrative: Narrative; reportDataAsOf: string | null; onRegenerate?: () => void } & Citing;
 
-function Result({ narrative, onRegenerate, ...citing }: ResultProps) {
+function Result({ narrative, reportDataAsOf, onRegenerate, ...citing }: ResultProps) {
   const { hypothesis } = narrative;
+  const staleData = reportDataAsOf !== null && narrative.dataAsOf !== reportDataAsOf;
   return (
     <div className="narrative-body">
       <div className="narrative-meta-row">
@@ -127,6 +128,12 @@ function Result({ narrative, onRegenerate, ...citing }: ResultProps) {
           </button>
         )}
       </div>
+      {staleData && (
+        <p className="narrative-note">
+          This explanation is based on data as of {dateTime(narrative.dataAsOf)}; the metrics on the page are as of{' '}
+          {dateTime(reportDataAsOf)}. Regenerate to explain the current data.
+        </p>
+      )}
       <p className="summary">{narrative.summary}</p>
 
       {hypothesis && (
@@ -191,12 +198,14 @@ function Result({ narrative, onRegenerate, ...citing }: ResultProps) {
 type NarrativePanelProps = Citing & {
   state: NarrativeState;
   ready: boolean;
+  /** When the page's metrics were synced; an explanation of older data says so. */
+  reportDataAsOf: string | null;
   onExplain: (refresh: boolean) => void;
   onCancel: () => void;
 };
 
 /** The "why": a model-written explanation whose numbers come only from the server-checked evidence. */
-export function NarrativePanel({ state, ready, onExplain, onCancel, canCite, onCite }: NarrativePanelProps) {
+export function NarrativePanel({ state, ready, reportDataAsOf, onExplain, onCancel, canCite, onCite }: NarrativePanelProps) {
   const citing = { canCite, onCite };
   return (
     <section className="narrative" aria-labelledby="narrative-title" aria-busy={state.status === 'loading'}>
@@ -242,11 +251,11 @@ export function NarrativePanel({ state, ready, onExplain, onCancel, canCite, onC
       )}
 
       {state.status === 'done' && (
-        <Result narrative={state.narrative} onRegenerate={() => onExplain(true)} {...citing} />
+        <Result narrative={state.narrative} reportDataAsOf={reportDataAsOf} onRegenerate={() => onExplain(true)} {...citing} />
       )}
       {state.status === 'loading' && state.previous && (
         <div className="narrative-stale">
-          <Result narrative={state.previous} {...citing} />
+          <Result narrative={state.previous} reportDataAsOf={reportDataAsOf} {...citing} />
         </div>
       )}
     </section>

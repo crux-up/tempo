@@ -758,6 +758,17 @@ tr.is-cited {
   margin-top: 12px;
 }
 
+.narrative-note {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--notice-border);
+  border-radius: var(--radius-control);
+  background: var(--notice-bg);
+  color: var(--warning);
+  font-size: 13px;
+  line-height: 20px;
+}
+
 .narrative-body section {
   margin-top: 24px;
 }

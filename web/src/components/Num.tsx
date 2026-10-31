@@ -6,8 +6,9 @@ type NumProps = { figure: Figure; fact?: string; className?: string };
 export function Num({ figure, fact, className }: NumProps) {
   if (!figure) {
     return (
-      <span className={`dash ${className ?? ''}`} data-fact={fact} aria-label="no data">
-        —
+      <span className={`dash ${className ?? ''}`} data-fact={fact}>
+        <span aria-hidden="true">—</span>
+        <span className="sr-only">no data</span>
       </span>
     );
   }

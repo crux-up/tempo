@@ -11,8 +11,10 @@ export const count = (n: number) => integer.format(n);
 /** Durations read as people say them: minutes under an hour, hours under two days, then days. */
 export function hours(h: number | null): Figure {
   if (h === null) return null;
-  if (h < 1) return { value: integer.format(Math.round(h * 60)), unit: 'min' };
-  if (h < 48) return { value: oneDecimal.format(h), unit: 'h' };
+  // Rounded first, so a value never shows as "60 min" or "48.0 h" at a unit's upper edge.
+  const minutes = Math.round(h * 60);
+  if (minutes < 60) return { value: integer.format(minutes), unit: 'min' };
+  if (Math.round(h * 10) / 10 < 48) return { value: oneDecimal.format(h), unit: 'h' };
   return { value: oneDecimal.format(h / 24), unit: 'd' };
 }
 
@@ -40,8 +42,12 @@ export const dateTime = (iso: string) => `${dateFormat.format(new Date(iso))}, $
  * Fact-sheet labels are written for the model ("Median hours to first review", "(fraction 0-1)"). On screen the value
  * carries its own unit, so the label drops the unit words.
  */
+/** Yes/no context facts are counts of 0 or 1 whose label ends with this marker. */
+const YES_NO = /\s*\(1 = yes, 0 = no\)/;
+
 export function evidenceLabel(label: string): string {
   return label
+    .replace(YES_NO, '')
     .replace(/\s*\(fraction 0-1\)/g, '')
     .replace(/, counted once per reviewer per PR/g, '')
     .replace(/\s*\(counted per reviewer per PR\)/g, '')
@@ -50,9 +56,12 @@ export function evidenceLabel(label: string): string {
 }
 
 /** Evidence values come from the server's metrics; they are formatted by unit, never read from model prose. */
-export function evidenceFigure(evidence: Pick<Evidence, 'value' | 'unit'>): Figure {
-  const { value, unit } = evidence;
+export function evidenceFigure(evidence: Pick<Evidence, 'value' | 'unit'> & { label?: string }): Figure {
+  const { value, unit, label } = evidence;
   if (value === null) return null;
+  if (typeof value === 'number' && label !== undefined && YES_NO.test(label)) {
+    return { value: value === 1 ? 'yes' : 'no', unit: '' };
+  }
   if (typeof value === 'string') return { value: unit === 'datetime' ? dateTime(value) : value, unit: '' };
   if (unit === 'hours') return hours(value);
   if (unit === 'share') return share(value);

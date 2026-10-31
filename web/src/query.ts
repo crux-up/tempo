@@ -12,7 +12,8 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const dayMs = (date: string) => Date.parse(`${date}T00:00:00Z`);
-const isDate = (value: string) => DATE.test(value) && !Number.isNaN(dayMs(value));
+/** A real calendar day: `2026-02-30` parses in some engines but does not survive the round trip. */
+const isDate = (value: string) => DATE.test(value) && !Number.isNaN(dayMs(value)) && isoDay(dayMs(value)) === value;
 
 export const today = () => isoDay(Date.now());
 export const addDays = (date: string, days: number) => isoDay(dayMs(date) + days * DAY_MS);

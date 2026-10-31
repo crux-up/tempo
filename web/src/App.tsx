@@ -8,14 +8,14 @@ import { QueryForm } from './components/QueryForm';
 import { TeamFigures } from './components/TeamFigures';
 import { TopBar } from './components/TopBar';
 import { WeeklyChart } from './components/WeeklyChart';
-import { FACT, factOnScreen, findFactElement, parseFact, type FactTarget } from './facts';
+import { FACT, factOnScreen, findFactElement, parseFact, unlinkedCommits, type FactTarget } from './facts';
 import { count, dateTime, day, figureText, hours, share } from './format';
 import { queryFromSearch, searchFromQuery, type Query } from './query';
 import type { ReviewFlowReport } from './types';
 
 type ReportState =
   | { status: 'loading'; previous: ReviewFlowReport | null }
-  | { status: 'done'; report: ReviewFlowReport }
+  | { status: 'done'; report: ReviewFlowReport; key: string }
   | { status: 'error'; problem: Problem };
 
 const CITE_HIGHLIGHT_MS = 2400;
@@ -46,6 +46,7 @@ export function App() {
   const [reportState, setReportState] = useState<ReportState>({ status: 'loading', previous: null });
   const [narrative, setNarrative] = useState<NarrativeState>({ status: 'idle' });
   const [cited, setCited] = useState<{ target: FactTarget; nonce: number } | null>(null);
+  const [citedWeek, setCitedWeek] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
   const narrativeAbort = useRef<AbortController | null>(null);
 
@@ -59,15 +60,19 @@ export function App() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const key = searchFromQuery(query);
+    // Old values stay on screen only while the same query reloads; Back, Forward and new queries start blank.
     setReportState((current) => ({
       status: 'loading',
-      previous: current.status === 'done' && reloads > 0 ? current.report : null,
+      previous: current.status === 'done' && current.key === key ? current.report : null,
     }));
     fetchReport(query, controller.signal).then(
-      (report) => setReportState({ status: 'done', report }),
+      (report) => {
+        if (!controller.signal.aborted) setReportState({ status: 'done', report, key });
+      },
       (error: unknown) => {
         const problem = asProblem(error);
-        if (problem) setReportState({ status: 'error', problem });
+        if (problem && !controller.signal.aborted) setReportState({ status: 'error', problem });
       },
     );
     return () => controller.abort();
@@ -78,6 +83,7 @@ export function App() {
     narrativeAbort.current?.abort();
     setNarrative({ status: 'idle' });
     setCited(null);
+    setCitedWeek(null);
   }, [query]);
 
   useEffect(() => {
@@ -90,7 +96,11 @@ export function App() {
       element.classList.remove('is-cited');
       element.getBoundingClientRect();
       element.classList.add('is-cited');
-      timer = window.setTimeout(() => element.classList.remove('is-cited'), CITE_HIGHLIGHT_MS);
+      // Ending the reveal lets the people table collapse again; it stays expanded until the person collapses it.
+      timer = window.setTimeout(() => {
+        element.classList.remove('is-cited');
+        setCited(null);
+      }, CITE_HIGHLIGHT_MS);
     });
     return () => {
       window.cancelAnimationFrame(frame);
@@ -120,10 +130,12 @@ export function App() {
         previous: current.status === 'done' ? current.narrative : null,
       }));
       fetchNarrative(query, refresh, controller.signal).then(
-        (result) => setNarrative({ status: 'done', narrative: result }),
+        (result) => {
+          if (!controller.signal.aborted) setNarrative({ status: 'done', narrative: result });
+        },
         (error: unknown) => {
           const problem = asProblem(error);
-          if (problem) setNarrative({ status: 'error', problem, refresh });
+          if (problem && !controller.signal.aborted) setNarrative({ status: 'error', problem, refresh });
         },
       );
     },
@@ -141,13 +153,15 @@ export function App() {
   const canCite = useCallback((id: string) => (report ? factOnScreen(id, report) : false), [report]);
   const cite = useCallback((id: string) => {
     const target = parseFact(id);
-    if (target) setCited((current) => ({ target, nonce: (current?.nonce ?? 0) + 1 }));
+    if (!target) return;
+    setCited((current) => ({ target, nonce: (current?.nonce ?? 0) + 1 }));
+    if (target.kind === 'week') setCitedWeek(target.week);
   }, []);
 
   const repoName = report?.repo ?? `${query.owner}/${query.repo}`;
   const scope = `${repoName} · ${day(query.from)} – ${day(query.to)}`;
   const loading = reportState.status === 'loading';
-  const unlinkedCommits = report ? report.people.filter((p) => p.unlinked).reduce((sum, p) => sum + p.commits, 0) : 0;
+  const unlinked = report ? unlinkedCommits(report) : 0;
 
   return (
     <>
@@ -217,7 +231,7 @@ export function App() {
                   <WeeklyChart
                     weekly={report.weekly}
                     windowMedian={report.team.timeToFirstReview.medianHours}
-                    citedWeek={cited?.target.kind === 'week' ? cited.target.week : null}
+                    citedWeek={citedWeek}
                     syncedFrom={report.coverage.partial ? report.coverage.from : null}
                   />
                 ) : (
@@ -230,11 +244,11 @@ export function App() {
                   <h2 id="people-title">Who reviews, who ships</h2>
                   <p className="section-note">
                     Review share counts each reviewer once per PR; code share is the share of merged PRs.
-                    {report && unlinkedCommits > 0 && (
+                    {report && unlinked > 0 && (
                       <>
                         {' '}
-                        <Num figure={{ value: count(unlinkedCommits), unit: '' }} fact={FACT.unlinkedCommits} />{' '}
-                        {unlinkedCommits === 1 ? 'commit is' : 'commits are'} from unlinked git names.
+                        <Num figure={{ value: count(unlinked), unit: '' }} fact={FACT.unlinkedCommits} />{' '}
+                        {unlinked === 1 ? 'commit is' : 'commits are'} from unlinked git names.
                       </>
                     )}
                   </p>
@@ -250,6 +264,7 @@ export function App() {
               <NarrativePanel
                 state={narrative}
                 ready={reportState.status === 'done'}
+                reportDataAsOf={report?.dataAsOf ?? null}
                 onExplain={explain}
                 onCancel={cancelNarrative}
                 canCite={canCite}

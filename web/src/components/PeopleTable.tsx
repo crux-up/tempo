@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { personFact, personRow } from '../facts';
 import { count, share } from '../format';
 import type { Person } from '../types';
@@ -20,6 +20,8 @@ const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
 ];
 
 const sortValue = (p: Person, key: SortKey) => (key === 'balance' ? p.reviewShare - p.codeShare : p[key]);
+const sortedPeople = (people: Person[], key: SortKey) =>
+  [...people].sort((a, b) => sortValue(b, key) - sortValue(a, key) || a.login.localeCompare(b.login));
 const rowKey = (p: Person) => `${p.login}\u0000${p.unlinked ? 'git' : 'gh'}`;
 const isBot = (login: string) => login.endsWith('[bot]');
 
@@ -64,17 +66,20 @@ type PeopleTableProps = { people: Person[] | null; revealLogin: string | null };
 export function PeopleTable({ people, revealLogin }: PeopleTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>('prsReviewed');
   const [expanded, setExpanded] = useState(false);
+  const sorted = people ? sortedPeople(people, sortKey) : [];
+  const revealIndex = revealLogin === null ? -1 : sorted.findIndex((p) => !p.unlinked && p.login === revealLogin);
+  const revealHidden = revealIndex >= VISIBLE_ROWS;
+
+  // A cited person past the cap expands the table; it stays expanded after the reveal ends, with its toggle shown.
+  useEffect(() => {
+    if (revealHidden) setExpanded(true);
+  }, [revealHidden]);
 
   if (people && people.length === 0) {
     return <p className="empty">Nobody reviewed, merged or committed in this window.</p>;
   }
 
-  const sorted = people
-    ? [...people].sort((a, b) => sortValue(b, sortKey) - sortValue(a, sortKey) || a.login.localeCompare(b.login))
-    : [];
-  const top = sorted.slice(0, VISIBLE_ROWS);
-  const revealHidden = revealLogin !== null && !top.some((p) => !p.unlinked && p.login === revealLogin);
-  const rows = expanded || revealHidden ? sorted : top;
+  const rows = expanded || revealHidden ? sorted : sorted.slice(0, VISIBLE_ROWS);
   const scale = Math.max(0, ...sorted.map((p) => Math.max(p.reviewShare, p.codeShare)));
 
   return (
@@ -160,7 +165,7 @@ export function PeopleTable({ people, revealLogin }: PeopleTableProps) {
               })}
         </tbody>
       </table>
-      {people && sorted.length > VISIBLE_ROWS && !revealHidden && (
+      {people && sorted.length > VISIBLE_ROWS && (expanded || !revealHidden) && (
         <button type="button" className="text-button table-more" onClick={() => setExpanded((v) => !v)}>
           {expanded ? `Show the top ${VISIBLE_ROWS}` : `Show all ${count(sorted.length)} people`}
         </button>

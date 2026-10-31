@@ -61,7 +61,13 @@ async function getJson<T>(path: string, signal: AbortSignal): Promise<T> {
       detail: 'The Tempo API did not answer. Check that the server is running.',
     });
   }
-  if (!response.ok) throw new ProblemError(await toProblem(response));
+  // A response that lands after the caller gave up is not news: report it as the abort it is.
+  signal.throwIfAborted();
+  if (!response.ok) {
+    const problem = await toProblem(response);
+    signal.throwIfAborted();
+    throw new ProblemError(problem);
+  }
   return (await response.json()) as T;
 }
 

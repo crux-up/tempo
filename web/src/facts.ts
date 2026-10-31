@@ -50,6 +50,10 @@ export function parseFact(id: string): FactTarget | null {
 
 const TEAM_IDS = new Set<string>(Object.values(FACT));
 
+/** Commits by git names with no linked account; the dashboard mentions them only when there are any. */
+export const unlinkedCommits = (report: Pick<ReviewFlowReport, 'people'>) =>
+  report.people.filter((p) => p.unlinked).reduce((sum, p) => sum + p.commits, 0);
+
 /** Whether the dashboard shows the number behind a fact id for this report. */
 export function factOnScreen(id: string, report: ReviewFlowReport): boolean {
   const target = parseFact(id);
@@ -57,6 +61,8 @@ export function factOnScreen(id: string, report: ReviewFlowReport): boolean {
   if (target.kind === 'person') return report.people.some((p) => !p.unlinked && p.login === target.login);
   if (target.kind === 'week') return report.weekly.some((w) => w.week === target.week);
   if (id === FACT.coverageFrom || id === FACT.coveragePartial) return report.coverage.partial;
+  if (id === FACT.unlinkedCommits) return unlinkedCommits(report) > 0;
+  if (id === FACT.topReviewer) return report.team.reviewConcentration.topReviewer !== null;
   return TEAM_IDS.has(id);
 }
 

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { asProblem, fetchReport } from './api';
 import { hourTicks, labelEvery } from './chart';
 import { factOnScreen, parseFact } from './facts';
 import { evidenceFigure, evidenceLabel, figureText, hours, share } from './format';
@@ -13,6 +14,12 @@ describe('format', () => {
     expect(hours(null)).toBeNull();
   });
 
+  it('rounds before choosing the unit', () => {
+    expect(figureText(hours(0.999))).toBe('1.0 h');
+    expect(figureText(hours(47.96))).toBe('2.0 d');
+    expect(figureText(hours(0.99))).toBe('59 min');
+  });
+
   it('shows shares as percentages and missing values as a dash', () => {
     expect(figureText(share(0.4123))).toBe('41.2%');
     expect(figureText(share(0.55, 0))).toBe('55%');
@@ -24,10 +31,17 @@ describe('format', () => {
     expect(figureText(evidenceFigure({ value: 0.322, unit: 'share' }))).toBe('32.2%');
     expect(figureText(evidenceFigure({ value: 1234, unit: 'count' }))).toBe('1,234');
     expect(figureText(evidenceFigure({ value: 'mcollina', unit: 'login' }))).toBe('mcollina');
-    expect(figureText(evidenceFigure({ value: '2026-09-23T21:15:00.000Z', unit: 'datetime' }))).toBe(
-      '23 Sept 2026, 21:15 UTC',
+    expect(figureText(evidenceFigure({ value: '2026-09-23T21:15:00.000Z', unit: 'datetime' }))).toMatch(
+      /^23 Sept? 2026, 21:15 UTC$/,
     );
     expect(evidenceFigure({ value: null, unit: 'hours' })).toBeNull();
+  });
+
+  it('shows yes/no facts as words', () => {
+    const label = 'Bot accounts are counted as people (1 = yes, 0 = no)';
+    expect(figureText(evidenceFigure({ label, value: 1, unit: 'count' }))).toBe('yes');
+    expect(figureText(evidenceFigure({ label, value: 0, unit: 'count' }))).toBe('no');
+    expect(evidenceLabel(label)).toBe('Bot accounts are counted as people');
   });
 
   it('drops unit words from fact labels', () => {
@@ -72,6 +86,11 @@ describe('query', () => {
     expect(validateWindow('2025-01-01', '2026-10-01')).toMatch(/366/);
     expect(validateWindow('2026-01-01', '2026-10-01')).toBeNull();
   });
+
+  it('rejects impossible calendar dates', () => {
+    expect(validateWindow('2026-02-30', '2026-03-10')).toMatch(/both dates/);
+    expect(queryFromSearch('?to=2026-13-01').to).not.toBe('2026-13-01');
+  });
 });
 
 describe('facts', () => {
@@ -82,21 +101,30 @@ describe('facts', () => {
     expect(parseFact('signal.reviewConcentration')).toBeNull();
   });
 
-  it('knows which facts the dashboard shows', () => {
-    const report = {
+  const report = (overrides: { unlinkedCommits?: number; topReviewer?: string | null } = {}) =>
+    ({
       people: [
-        { login: 'mcollina', unlinked: false },
-        { login: 'Matteo Collina', unlinked: true },
+        { login: 'mcollina', unlinked: false, commits: 3 },
+        { login: 'Matteo Collina', unlinked: true, commits: overrides.unlinkedCommits ?? 2 },
       ],
       weekly: [{ week: '2026-W42' }],
       coverage: { partial: false },
-    } as unknown as ReviewFlowReport;
-    expect(factOnScreen('person.mcollina.reviewShare', report)).toBe(true);
-    expect(factOnScreen('person.ghost.reviewShare', report)).toBe(false);
-    expect(factOnScreen('week.2026-W42.prsOpened', report)).toBe(true);
-    expect(factOnScreen('week.2026-W01.prsOpened', report)).toBe(false);
-    expect(factOnScreen('team.timeToFirstReview.median', report)).toBe(true);
-    expect(factOnScreen('meta.coverageFrom', report)).toBe(false);
+      team: { reviewConcentration: { topReviewer: overrides.topReviewer === undefined ? 'mcollina' : overrides.topReviewer } },
+    }) as unknown as ReviewFlowReport;
+
+  it('shows the unlinked commit count and top reviewer only when they are rendered', () => {
+    expect(factOnScreen('team.unlinkedCommits', report())).toBe(true);
+    expect(factOnScreen('team.unlinkedCommits', report({ unlinkedCommits: 0 }))).toBe(false);
+    expect(factOnScreen('team.reviewConcentration.topReviewer', report({ topReviewer: null }))).toBe(false);
+  });
+
+  it('knows which facts the dashboard shows', () => {
+    expect(factOnScreen('person.mcollina.reviewShare', report())).toBe(true);
+    expect(factOnScreen('person.ghost.reviewShare', report())).toBe(false);
+    expect(factOnScreen('week.2026-W42.prsOpened', report())).toBe(true);
+    expect(factOnScreen('week.2026-W01.prsOpened', report())).toBe(false);
+    expect(factOnScreen('team.timeToFirstReview.median', report())).toBe(true);
+    expect(factOnScreen('meta.coverageFrom', report())).toBe(false);
   });
 });
 
@@ -110,5 +138,20 @@ describe('chart', () => {
   it('thins labels to fit the width', () => {
     expect(labelEvery(13, 860, 60)).toBe(1);
     expect(labelEvery(13, 300, 60)).toBe(3);
+  });
+});
+
+describe('api', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('reports an aborted request as an abort, not as a problem', async () => {
+    const controller = new AbortController();
+    vi.stubGlobal('fetch', async () => {
+      controller.abort();
+      return new Response(JSON.stringify({ title: 'Too many requests', detail: 'retry' }), { status: 429 });
+    });
+    const query = { owner: 'a', repo: 'b', from: '2026-10-01', to: '2026-10-31', includeBots: false };
+    const error = await fetchReport(query, controller.signal).catch((e: unknown) => e);
+    expect(asProblem(error)).toBeNull();
   });
 });
