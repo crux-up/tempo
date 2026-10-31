@@ -172,13 +172,17 @@ describe('getRepository', () => {
     await expect(h.client.getRepository(repo)).rejects.toBeInstanceOf(RepoNotFoundError);
   });
 
-  it('maps a repository without a default branch to UpstreamError', async () => {
+  it('returns a null default branch for an empty repository', async () => {
     const h = harness([
       json({
         data: { repository: { nameWithOwner: 'acme/widgets', isPrivate: false, defaultBranchRef: null }, rateLimit },
       }),
     ]);
-    await expect(h.client.getRepository(repo)).rejects.toBeInstanceOf(UpstreamError);
+    await expect(h.client.getRepository(repo)).resolves.toEqual({
+      owner: 'acme',
+      name: 'widgets',
+      defaultBranch: null,
+    });
   });
 });
 
@@ -405,7 +409,7 @@ describe('commitPages', () => {
     expect(pages[0]?.commits.map((c) => [c.sha, c.authorLogin, c.authorName, c.authorIsBot])).toEqual([
       ['a1', 'alice', 'Alice A', false],
       ['a2', null, 'Stranger', false],
-      ['a3', null, 'dependabot[bot]', true],
+      ['a3', 'dependabot[bot]', 'dependabot[bot]', true],
       ['a4', 'renovate[bot]', 'Renovate', true],
       ['a5', null, '', false],
     ]);

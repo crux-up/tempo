@@ -6,6 +6,7 @@ import type { CommitRow, PullRequestRow, RepoRef, ReviewRow } from '../../src/do
 import { RepoNotFoundError, UpstreamError, UpstreamRateLimitedError } from '../../src/errors.js';
 import type { GitHubSource } from '../../src/github/client.js';
 import type { Logger } from '../../src/logger.js';
+import { ReviewFlowService } from '../../src/services/reviewFlowService.js';
 import { SyncService } from '../../src/sync/syncService.js';
 
 const pr = (n: number, updatedAt: string): PullRequestRow => ({
@@ -60,7 +61,7 @@ class FakeGitHub implements GitHubSource {
     return this.quotaLeft;
   }
 
-  defaultBranch = 'main';
+  defaultBranch: string | null = 'main';
   onPage: () => void = () => {};
   repoCalls: RepoRef[] = [];
   prCalls = 0;
@@ -237,6 +238,22 @@ describe('SyncService', () => {
     await service().ensureSynced(REPO, lastWeek);
 
     expect(github.commitCalls[1]).toMatchObject({ since: '2026-03-25T00:00:00.000Z' });
+  });
+
+  it('syncs an empty repository with no default branch as complete, without a commit query', async () => {
+    github.defaultBranch = null;
+    github.prPages = [page()];
+
+    const result = await service().ensureSynced(REPO, MARCH);
+
+    expect(github.commitCalls).toEqual([]);
+    expect(result.repo.defaultBranch).toBeNull();
+    expect(result.coverage).toEqual({ partial: false, from: MARCH.from.toISOString(), to: T0.toISOString() });
+    const report = await new ReviewFlowService({ store, sync: service(), now: () => clock }).getReport(REPO, {
+      from: '2026-03-01',
+    });
+    expect(report.totals).toMatchObject({ prsOpened: 0, prsMerged: 0, commits: 0 });
+    expect(report.people).toEqual([]);
   });
 
   it('re-checks that the repository is public on every run that syncs, and stops serving it once private', async () => {

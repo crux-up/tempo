@@ -220,7 +220,8 @@ export class SyncService {
 
   /** Fetches commits in `[since, until)`, upserting each page as it arrives. */
   private async commitPass(repo: RepoRecord, since: number, until: number, budget: Budget): Promise<PassResult> {
-    if (since >= until) return { covered: since, stopped: false };
+    // An empty repository has no default branch and so no commits: the range is complete.
+    if (since >= until || repo.defaultBranch === null) return { covered: since, stopped: false };
     const { github, store } = this.deps;
     const source = { owner: repo.owner, name: repo.name };
     let oldest = until;

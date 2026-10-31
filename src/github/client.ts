@@ -32,7 +32,8 @@ type GitHubQuota = { remaining: number; resetAt: string };
 export interface GitHubSource {
   /** The rate limit GitHub reported on its latest response, or null before the first response. */
   quota(): GitHubQuota | null;
-  getRepository(repo: RepoRef): Promise<{ owner: string; name: string; defaultBranch: string }>;
+  /** `defaultBranch` is null for an empty repository. */
+  getRepository(repo: RepoRef): Promise<{ owner: string; name: string; defaultBranch: string | null }>;
   /**
    * Pages PRs ordered by UPDATED_AT DESC; yields each page and the caller stops iterating. `after` resumes after a
    * cursor from an earlier page. `endCursor` resumes after the page it comes with and is null on the last page.
@@ -195,9 +196,8 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
       } | null;
       // Private repositories are reported exactly like missing ones, so the response never confirms they exist.
       if (!repository || repository.isPrivate !== false) throw new RepoNotFoundError(label(repo));
-      if (!repository.defaultBranchRef) throw new UpstreamError('The repository has no default branch');
       const [owner = '', name = ''] = repository.nameWithOwner.split('/');
-      return { owner, name, defaultBranch: repository.defaultBranchRef.name };
+      return { owner, name, defaultBranch: repository.defaultBranchRef?.name ?? null };
     },
 
     async *pullRequestPages(repo, opts) {

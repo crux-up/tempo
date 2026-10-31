@@ -6,7 +6,8 @@ export type RepoRecord = {
   key: string;
   owner: string;
   name: string;
-  defaultBranch: string;
+  /** Null for an empty repository, which has no default branch yet. */
+  defaultBranch: string | null;
   syncedFrom: string | null;
   syncedAt: string | null;
   /** GitHub cursor after the last PR page an unfinished backfill stored; the next backfill resumes there. */
@@ -76,7 +77,8 @@ const toRepo = (r: RepoDbRow): RepoRecord => ({
   key: r.key,
   owner: r.owner,
   name: r.name,
-  defaultBranch: r.default_branch,
+  // The column is NOT NULL, so an empty repository stores the empty string.
+  defaultBranch: r.default_branch === '' ? null : r.default_branch,
   syncedFrom: r.synced_from,
   syncedAt: r.synced_at,
   backfillCursor: r.backfill_cursor,
@@ -278,8 +280,8 @@ export class Store {
     return row ? toRepo(row) : null;
   }
 
-  upsertRepo(r: { key: string; owner: string; name: string; defaultBranch: string }): RepoRecord {
-    const row = this.insertRepo.get(r.key, r.owner, r.name, r.defaultBranch);
+  upsertRepo(r: { key: string; owner: string; name: string; defaultBranch: string | null }): RepoRecord {
+    const row = this.insertRepo.get(r.key, r.owner, r.name, r.defaultBranch ?? '');
     if (!row) throw new Error('repo upsert returned no row');
     return toRepo(row);
   }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { PersonStats, PullRequestRow, ReviewRow } from '../../src/domain/types.js';
+import { mapCommit, mapPullRequest } from '../../src/github/mapping.js';
 import { computeReviewFlow } from '../../src/metrics/reviewFlow.js';
-import { smallRepo } from '../fixtures/smallRepo.js';
+import { commits, pullRequests, smallRepo } from '../fixtures/smallRepo.js';
 
 const metrics = computeReviewFlow(smallRepo());
 const withBots = computeReviewFlow(smallRepo({ includeBots: true }));
@@ -171,6 +172,27 @@ describe('computeReviewFlow with includeBots', () => {
       'Erin Example',
       'dave',
     ]);
+  });
+
+  it('shows a bot once when its PRs come from a GraphQL Bot actor and its commits have no linked user', () => {
+    const botPr = mapPullRequest({
+      ...pullRequests[1]!,
+      author: { __typename: 'Bot', login: 'dependabot' },
+      reviews: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+    });
+    const botCommit = mapCommit({
+      oid: 'c4',
+      committedDate: '2026-03-03T07:00:00Z',
+      author: { name: 'dependabot[bot]', user: null },
+    });
+    const m = computeReviewFlow(
+      smallRepo({
+        includeBots: true,
+        pullRequests: pullRequests.map((p) => (p.number === 2 ? botPr : p)),
+        commits: commits.map((c) => (c.sha === 'c4' ? botCommit : c)),
+      }),
+    );
+    expect(m.people.filter((p) => p.login.startsWith('dependabot'))).toEqual([person('dependabot[bot]', withBots)]);
   });
 
   it('adds bot PRs to the duration samples when asked', () => {
