@@ -14,6 +14,7 @@ import { inWindow } from '../domain/window.js';
 import { hoursBetween, isoWeek, median, ordinal, percentile, roundTo } from './stats.js';
 
 const WEEK_MS = 7 * 86_400_000;
+const BOT_SUFFIX = '[bot]';
 
 /** Rows after bot filtering, with qualifying reviews indexed by PR. */
 type Prepared = {
@@ -114,7 +115,8 @@ function reviewedBeforeMerge(ctx: Prepared, pr: PullRequestRow): boolean {
   return first !== undefined && pr.mergedAt !== null && ms(first.submittedAt) < ms(pr.mergedAt);
 }
 
-// Unlinked commit authors are keyed apart from logins so a git name never merges into a GitHub account.
+// Unlinked commit authors are keyed apart from logins so a git name never merges into a GitHub account (a verified
+// bot is the one exception, see accumulatePeople).
 function personAcc(map: Map<string, PersonAcc>, login: string, unlinked = false): PersonAcc {
   const key = `${unlinked ? 'name' : 'login'}:${login}`;
   let acc = map.get(key);
@@ -125,11 +127,28 @@ function personAcc(map: Map<string, PersonAcc>, login: string, unlinked = false)
   return acc;
 }
 
+/**
+ * Bot logins that GitHub itself reported as PR or review authors in this input. A login with the `[bot]` suffix comes
+ * only from a GraphQL `Bot` actor (user logins cannot hold brackets), never from a git author name.
+ */
+function verifiedBotLogins(input: MetricsInput): Set<string> {
+  const logins = new Set<string>();
+  const add = (login: string, isBot: boolean) => {
+    if (isBot && login.endsWith(BOT_SUFFIX)) logins.add(login);
+  };
+  for (const pr of input.pullRequests) add(pr.author, pr.authorIsBot);
+  for (const review of input.reviews) add(review.reviewer, review.reviewerIsBot);
+  return logins;
+}
+
 function accumulatePeople(ctx: Prepared, opened: PullRequestRow[], merged: PullRequestRow[]): PersonAcc[] {
   const map = new Map<string, PersonAcc>();
+  // A bot's commits have no linked user. Its git name joins the bot only when that bot is a verified actor here, so
+  // naming yourself "x[bot]" in git never claims a GitHub identity.
+  const bots = verifiedBotLogins(ctx.input);
   for (const commit of ctx.commits) {
-    const unlinked = commit.authorLogin === null;
-    personAcc(map, commit.authorLogin ?? commit.authorName, unlinked).counts.commits += 1;
+    const login = commit.authorLogin ?? (bots.has(commit.authorName) ? commit.authorName : null);
+    personAcc(map, login ?? commit.authorName, login === null).counts.commits += 1;
   }
   for (const pr of opened) personAcc(map, pr.author).counts.prsOpened += 1;
   for (const pr of merged) {

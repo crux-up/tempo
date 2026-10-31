@@ -185,6 +185,7 @@ describe('computeReviewFlow with includeBots', () => {
       committedDate: '2026-03-03T07:00:00Z',
       author: { name: 'dependabot[bot]', user: null },
     });
+    expect(botCommit.authorLogin).toBeNull();
     const m = computeReviewFlow(
       smallRepo({
         includeBots: true,
@@ -193,6 +194,32 @@ describe('computeReviewFlow with includeBots', () => {
       }),
     );
     expect(m.people.filter((p) => p.login.startsWith('dependabot'))).toEqual([person('dependabot[bot]', withBots)]);
+  });
+
+  it('keeps a git name that looks like a bot unlinked when no verified bot actor has that login', () => {
+    const spoofed = mapCommit({
+      oid: 'c9',
+      committedDate: '2026-03-04T07:00:00Z',
+      author: { name: 'alice[bot]', user: null },
+    });
+    const m = computeReviewFlow(smallRepo({ includeBots: true, commits: [...commits, spoofed] }));
+    expect(m.people.filter((p) => p.login === 'alice[bot]')).toEqual([
+      expect.objectContaining({ unlinked: true, commits: 1, prsOpened: 0 }),
+    ]);
+    expect(person('alice', m)).toMatchObject({ unlinked: false, commits: 1 });
+  });
+
+  it('does not merge a bot-like git name into a login that only a non-bot row carries', () => {
+    const spoofed = mapCommit({
+      oid: 'c9',
+      committedDate: '2026-03-04T07:00:00Z',
+      author: { name: 'imposter[bot]', user: null },
+    });
+    const human: PullRequestRow = { ...pullRequests[0]!, id: 'PR9', number: 9, author: 'imposter[bot]', authorIsBot: false };
+    const m = computeReviewFlow(
+      smallRepo({ includeBots: true, pullRequests: [...pullRequests, human], commits: [...commits, spoofed] }),
+    );
+    expect(m.people.filter((p) => p.login === 'imposter[bot]').map((p) => p.unlinked).sort()).toEqual([false, true]);
   });
 
   it('adds bot PRs to the duration samples when asked', () => {

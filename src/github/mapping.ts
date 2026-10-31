@@ -38,8 +38,6 @@ const MAX_NAME_LENGTH = 100;
 /** Control characters and invisible format characters (bidi marks and overrides, zero-width characters, BOM) that can disguise a name. */
 const UNSAFE_NAME_CHARS = /[\p{Cc}\p{Cf}]/gu;
 const BOT_SUFFIX = '[bot]';
-/** A GitHub App bot login with its suffix, as git records it in the author name of the bot's commits. */
-const BOT_LOGIN = /^[A-Za-z0-9-]+\[bot\]$/;
 const REVIEW_STATES: ReadonlySet<string> = new Set<ReviewState>([
   'APPROVED',
   'CHANGES_REQUESTED',
@@ -49,8 +47,8 @@ const REVIEW_STATES: ReadonlySet<string> = new Set<ReviewState>([
 
 /**
  * GraphQL `Bot` actors have logins without the `[bot]` suffix that their commits carry (`dependabot` against
- * `dependabot[bot]`). The suffix is added here, and `mapCommit` takes a bot's login from its author name, so one bot
- * is one person across PRs, reviews and commits.
+ * `dependabot[bot]`). The suffix is added here, so the metrics can match a bot's
+ * unlinked commits (author name `dependabot[bot]`) to the verified bot actor.
  */
 function mapActor(actor: RawActor): { login: string; isBot: boolean } {
   if (!actor) return { login: GHOST, isBot: false };
@@ -103,10 +101,13 @@ function sanitizeName(name: string): string {
     .join('');
 }
 
-/** A bot commit has no linked user (`GitActor.user` is a `User`), so a bot login in the author name is its login. */
+/**
+ * The login comes only from the linked GitHub user, never from the free-text git author name. A bot commit has no
+ * linked user (`GitActor.user` is a `User`); the metrics decide whether its name matches a verified bot.
+ */
 export function mapCommit(commit: RawCommit): CommitRow {
+  const login = commit.author?.user?.login ?? null;
   const name = sanitizeName(commit.author?.name ?? '');
-  const login = commit.author?.user?.login ?? (BOT_LOGIN.test(name) ? name : null);
   return {
     sha: commit.oid,
     authorLogin: login,

@@ -409,7 +409,7 @@ describe('commitPages', () => {
     expect(pages[0]?.commits.map((c) => [c.sha, c.authorLogin, c.authorName, c.authorIsBot])).toEqual([
       ['a1', 'alice', 'Alice A', false],
       ['a2', null, 'Stranger', false],
-      ['a3', 'dependabot[bot]', 'dependabot[bot]', true],
+      ['a3', null, 'dependabot[bot]', true],
       ['a4', 'renovate[bot]', 'Renovate', true],
       ['a5', null, '', false],
     ]);
