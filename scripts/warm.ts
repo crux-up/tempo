@@ -6,38 +6,73 @@ import { parseWindow } from '../src/domain/window.js';
 import { AppError } from '../src/errors.js';
 import { createGitHubClient } from '../src/github/client.js';
 import { RepoParams } from '../src/http/params.js';
+import { createAnthropicNarrativeModel } from '../src/narrative/llmClient.js';
+import { NarrativeService } from '../src/narrative/narrativeService.js';
+import { ReviewFlowService } from '../src/services/reviewFlowService.js';
 import { SyncService } from '../src/sync/syncService.js';
 
-const USAGE = 'Usage: npm run warm -- <owner/name> [from] [to]';
+const USAGE = 'Usage: npm run warm -- <owner/name> [from] [to] [--narrative]';
+const NARRATIVE_FLAG = '--narrative';
 
+/**
+ * Syncs a repository for a window, so the first dashboard request does not pay for it. With --narrative it also
+ * generates the narrative for the same window (and so caches it); that needs ANTHROPIC_API_KEY. Pass the `from` and
+ * `to` the dashboard sends, or neither, to warm the entry the dashboard will ask for.
+ */
 async function main(): Promise<void> {
-  const [slug, from, to] = process.argv.slice(2);
+  const args = process.argv.slice(2);
+  const withNarrative = args.includes(NARRATIVE_FLAG);
+  const [slug, from, to, ...extra] = args.filter((arg) => arg !== NARRATIVE_FLAG);
   const [owner, name, ...rest] = (slug ?? '').split('/');
   const repo = RepoParams.safeParse({ owner, repo: name });
-  if (!repo.success || rest.length > 0) {
+  if (!repo.success || rest.length > 0 || extra.length > 0) {
     console.error(USAGE);
     process.exit(1);
   }
 
   const config = readConfig();
+  if (withNarrative && !config.anthropicApiKey) {
+    console.error('--narrative needs ANTHROPIC_API_KEY (environment or .env)');
+    process.exit(1);
+  }
   const logger = createLogger(config);
   const db = openDatabase(config.databasePath);
   try {
+    const store = new Store(db);
     const sync = new SyncService({
       github: createGitHubClient({ token: config.githubToken, logger }),
-      store: new Store(db),
+      store,
       ttlMinutes: config.syncTtlMinutes,
       maxPages: config.syncMaxPages,
       maxSeconds: config.syncMaxSeconds,
       logger,
     });
+    const ref = { owner: repo.data.owner, name: repo.data.repo };
     const window = parseWindow({ from, to }, new Date());
-    const result = await sync.ensureSynced({ owner: repo.data.owner, name: repo.data.repo }, window);
+    const result = await sync.ensureSynced(ref, window);
     console.log(`${result.repo.owner}/${result.repo.name} synced as of ${result.dataAsOf}`);
     console.log(
       `window ${window.from.toISOString()} to ${window.to.toISOString()}; ` +
         `coverage ${result.coverage.from} to ${result.coverage.to}${result.coverage.partial ? ' (partial)' : ''}`,
     );
+
+    if (config.anthropicApiKey && withNarrative) {
+      const narratives = new NarrativeService({
+        model: createAnthropicNarrativeModel({ apiKey: config.anthropicApiKey, model: config.anthropicModel, logger }),
+        modelName: config.anthropicModel,
+        store,
+        reviewFlow: new ReviewFlowService({ store, sync }),
+        logger,
+      });
+      const startedAt = performance.now();
+      const narrative = await narratives.getNarrative(ref, { from, to });
+      const latency = ((performance.now() - startedAt) / 1000).toFixed(1);
+      const confidence = narrative.hypothesis ? narrative.hypothesis.confidence.toFixed(2) : 'none';
+      console.log(
+        `narrative ${narrative.cached ? 'cached' : 'new'} for ${narrative.window.from} to ${narrative.window.to}; ` +
+          `model ${narrative.model}; confidence ${confidence}; latency ${latency}s`,
+      );
+    }
   } catch (err) {
     if (err instanceof AppError) {
       console.error(`${err.status} ${err.title}: ${err.message}`);
