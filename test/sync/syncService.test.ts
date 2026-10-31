@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../../src/db/database.js';
 import { Store } from '../../src/db/store.js';
 import type { CommitRow, PullRequestRow, RepoRef, ReviewRow } from '../../src/domain/types.js';
-import { UpstreamError } from '../../src/errors.js';
+import { RepoNotFoundError, UpstreamError } from '../../src/errors.js';
 import type { GitHubSource } from '../../src/github/client.js';
 import type { Logger } from '../../src/logger.js';
 import { SyncService } from '../../src/sync/syncService.js';
@@ -53,6 +53,8 @@ class FakeGitHub implements GitHubSource {
   commitPagesData: CommitRow[][] = [];
   failPrPageAt: number | null = null;
   failCommits = false;
+  turnedPrivate = false;
+  defaultBranch = 'main';
   onPage: () => void = () => {};
   repoCalls: RepoRef[] = [];
   prCalls = 0;
@@ -64,7 +66,8 @@ class FakeGitHub implements GitHubSource {
   async getRepository(repo: RepoRef) {
     this.repoCalls.push(repo);
     await Promise.resolve();
-    return { owner: 'fastify', name: 'fastify', defaultBranch: 'main' };
+    if (this.turnedPrivate) throw new RepoNotFoundError(`${repo.owner}/${repo.name}`);
+    return { owner: 'fastify', name: 'fastify', defaultBranch: this.defaultBranch };
   }
 
   async *pullRequestPages(_repo: RepoRef, opts?: { after?: string }): AsyncIterable<YieldedPage> {
@@ -197,6 +200,30 @@ describe('SyncService', () => {
     expect(result.repo.syncedFrom).toBe('2026-03-01T00:00:00.000Z');
     expect(result.dataAsOf).toBe('2026-03-31T12:20:00.000Z');
     expect(result.coverage.partial).toBe(false);
+  });
+
+  it('re-checks that the repository is public on every run that syncs, and stops serving it once private', async () => {
+    await service().ensureSynced(REPO, MARCH);
+    clock = new Date(T0.getTime() + 20 * 60_000);
+    github.turnedPrivate = true;
+    github.prPagesPulled = 0;
+
+    await expect(service().ensureSynced(REPO, MARCH)).rejects.toBeInstanceOf(RepoNotFoundError);
+    await expect(service().ensureSynced(REPO, MARCH)).rejects.toBeInstanceOf(RepoNotFoundError);
+
+    expect(github.repoCalls).toHaveLength(3);
+    expect(github.prPagesPulled).toBe(0);
+  });
+
+  it('refreshes the default branch from the repository check', async () => {
+    await service().ensureSynced(REPO, MARCH);
+    clock = new Date(T0.getTime() + 20 * 60_000);
+    github.defaultBranch = 'trunk';
+
+    const result = await service().ensureSynced(REPO, MARCH);
+
+    expect(result.repo.defaultBranch).toBe('trunk');
+    expect(github.commitCalls.at(-1)?.branch).toBe('trunk');
   });
 
   it('backfills when a wider window starts before syncedFrom', async () => {
@@ -403,7 +430,8 @@ describe('SyncService', () => {
 
     const [march, wider] = await Promise.all([sync.ensureSynced(REPO, MARCH), sync.ensureSynced(REPO, FROM_FEB_15)]);
 
-    expect(github.repoCalls).toHaveLength(1);
+    // Two runs: the shared one, then the wider caller's backfill; each run checks the repository once.
+    expect(github.repoCalls).toHaveLength(2);
     expect(march.coverage).toEqual({ partial: false, from: '2026-03-01T00:00:00.000Z', to: T0.toISOString() });
     expect(wider.coverage).toEqual({ partial: false, from: '2026-02-15T00:00:00.000Z', to: T0.toISOString() });
     const stored = store.loadWindowData(wider.repo.id, FROM_FEB_15, T0).pullRequests.map((p) => p.number);

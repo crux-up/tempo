@@ -96,7 +96,7 @@ export class SyncService {
       if (pending) {
         const budgetHit = await pending;
         const record = this.deps.store.getRepo(key) as RepoRecord;
-        if (budgetHit || !this.needsWork(record, window)) return this.result(record, window);
+        if (budgetHit || !this.hasWork(record, window, this.now().getTime())) return this.result(record, window);
         continue;
       }
       const run = this.run(key, repo, window).finally(() => this.inFlight.delete(key));
@@ -112,8 +112,8 @@ export class SyncService {
     return { needBackfill, needRefresh };
   }
 
-  private needsWork(repo: RepoRecord, window: TimeWindow): boolean {
-    const { needBackfill, needRefresh } = this.plan(repo, window, this.now().getTime());
+  private hasWork(repo: RepoRecord, window: TimeWindow, at: number): boolean {
+    const { needBackfill, needRefresh } = this.plan(repo, window, at);
     return needBackfill || needRefresh;
   }
 
@@ -122,9 +122,12 @@ export class SyncService {
     const { store, logger } = this.deps;
     const budget = new Budget(this.deps.maxPages, this.deps.maxSeconds * 1000, this.now);
     const startedAt = budget.startedAt;
-    const repo = store.getRepo(key) ?? (await this.register(key, ref));
+    const stored = store.getRepo(key);
+    if (stored && !this.hasWork(stored, window, startedAt)) return false;
+    // Every run that fetches re-checks the repository, so one made private since the last run stops being served
+    // (one extra request per TTL). The check also picks up a renamed default branch.
+    const repo = await this.register(key, ref);
     const { needBackfill, needRefresh } = this.plan(repo, window, startedAt);
-    if (!needBackfill && !needRefresh) return false;
 
     const windowFrom = window.from.getTime();
     const oldFrom = repo.syncedFrom === null ? null : toMs(repo.syncedFrom);
