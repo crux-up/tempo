@@ -266,6 +266,11 @@ export class Store {
     });
   }
 
+  /** Throws when the database cannot answer a trivial query. */
+  ping(): void {
+    this.db.prepare('SELECT 1').get();
+  }
+
   getRepo(key: string): RepoRecord | null {
     const row = this.selectRepo.get(key);
     return row ? toRepo(row) : null;

@@ -1,4 +1,4 @@
-const PROBLEM_BASE = 'https://tempo.dev/problems/';
+export const PROBLEM_BASE = 'https://tempo.dev/problems/';
 
 /** Raised at startup when environment configuration is missing or invalid. */
 export class ConfigError extends Error {
@@ -82,5 +82,33 @@ export class LlmError extends AppError {
   readonly title = 'Language model error';
   constructor(detail: string) {
     super(detail);
+  }
+}
+
+export class RouteNotFoundError extends AppError {
+  readonly status = 404;
+  readonly type = `${PROBLEM_BASE}not-found`;
+  readonly title = 'Not found';
+  constructor(method: string) {
+    super(`No ${method} route matches this path`);
+  }
+}
+
+export class TooManyRequestsError extends AppError {
+  readonly status = 429;
+  readonly type = `${PROBLEM_BASE}rate-limited`;
+  readonly title = 'Too many requests';
+  constructor(retryAfterSeconds: number) {
+    super(`Request rate limit exceeded; retry in ${retryAfterSeconds} seconds`);
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+export class NotReadyError extends AppError {
+  readonly status = 503;
+  readonly type = `${PROBLEM_BASE}not-ready`;
+  readonly title = 'Service not ready';
+  constructor() {
+    super('The database is not available');
   }
 }
