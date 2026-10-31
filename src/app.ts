@@ -45,6 +45,8 @@ const REDACT_PATHS = [
 
 const DEFAULT_WEB_ROOT = fileURLToPath(new URL('../web/dist', import.meta.url));
 const RATE_LIMIT_PER_MINUTE = 120;
+/** Route pattern @fastify/static registers for `prefix: '/'`. */
+const STATIC_CATCH_ALL = '/*';
 
 /** The one pino logger for the process: redaction and the request serializer always apply. */
 export function createLogger(config: Config, overrides: LoggerOptions = {}, destination?: DestinationStream): Logger {
@@ -75,6 +77,21 @@ function withoutUnusedSchemas(doc: OpenApiDoc): OpenApiDoc {
 
 const acceptsHtml = (request: FastifyRequest) => request.headers.accept?.includes('text/html') ?? false;
 const isApiPath = (path: string) => path === '/api' || path.startsWith('/api/');
+
+/**
+ * Whether a request targets the API, judged the way the router sees it: by the matched route pattern. Requests that
+ * match no route, or only the static catch-all, are judged by the percent-decoded path. An undecodable path counts
+ * as API, so it never escapes the limit.
+ */
+function targetsApi(request: FastifyRequest): boolean {
+  const pattern = request.routeOptions.url;
+  if (pattern !== undefined && pattern !== STATIC_CATCH_ALL) return isApiPath(pattern);
+  try {
+    return isApiPath(decodeURIComponent(requestPath(request)));
+  } catch {
+    return true;
+  }
+}
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const loggerInstance: FastifyBaseLogger | undefined =
@@ -114,7 +131,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     max: RATE_LIMIT_PER_MINUTE,
     timeWindow: '1 minute',
     // Only the API is limited; static assets and the SPA shell are cheap and a page load fetches several.
-    allowList: (request) => !isApiPath(requestPath(request)),
+    allowList: (request) => !targetsApi(request),
     errorResponseBuilder: (_request, context) => new TooManyRequestsError(Math.max(1, Math.ceil(context.ttl / 1000))),
   });
 
@@ -145,7 +162,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   app.setNotFoundHandler({ preHandler: app.rateLimit() }, (request: FastifyRequest, reply: FastifyReply) => {
     // Client-side routes resolve to the SPA shell; API paths and asset requests get a problem.
-    if (serveSpa && request.method === 'GET' && !isApiPath(requestPath(request)) && acceptsHtml(request)) {
+    if (serveSpa && request.method === 'GET' && !targetsApi(request) && acceptsHtml(request)) {
       return reply.header('cache-control', 'no-cache').sendFile('index.html');
     }
     return sendNotFound(request, reply);

@@ -31,6 +31,7 @@ export const DATA_AS_OF = '2026-03-19T23:50:00.000Z';
 export class FakeSync {
   calls: Array<{ repo: RepoRef; window: TimeWindow }> = [];
   failWith: Error | null = null;
+  dataAsOf = DATA_AS_OF;
 
   constructor(private readonly store: Store) {}
 
@@ -42,7 +43,7 @@ export class FakeSync {
     if (!record) throw new Error('test repo not seeded');
     return {
       repo: record,
-      dataAsOf: DATA_AS_OF,
+      dataAsOf: this.dataAsOf,
       coverage: { partial: false, from: window.from.toISOString(), to: window.to.toISOString() },
     };
   }
@@ -53,6 +54,7 @@ export type Harness = {
   db: Database;
   store: Store;
   sync: FakeSync;
+  reviewFlow: ReviewFlowService;
   logs: string[];
   close: () => Promise<void>;
 };
@@ -87,6 +89,7 @@ export async function createHarness(opts: { webRoot?: string } = {}): Promise<Ha
     db,
     store,
     sync,
+    reviewFlow,
     logs,
     close: async () => {
       await app.close();

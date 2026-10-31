@@ -109,6 +109,9 @@ describe('single-page app', () => {
     }
     const api = await h.app.inject({ method: 'GET', url: '/api/v1/nope' });
     expect(api.headers['x-ratelimit-remaining']).toBe('119');
+    const encoded = await h.app.inject({ method: 'GET', url: '/%61pi/v1/nope', headers: { accept: 'text/html' } });
+    expect(encoded.statusCode).toBe(404);
+    expect(encoded.headers['x-ratelimit-remaining']).toBe('118');
   });
 
   it('returns 404 problems at / when there is no built web app', async () => {

@@ -54,7 +54,8 @@ export class ReviewFlowService {
     const window = parseWindow(query, now);
     const includeBots = query.includeBots === 'true';
     const synced = await this.deps.sync.ensureSynced(repo, window);
-    const asOf = new Date(Math.min(now.getTime(), Date.parse(synced.dataAsOf)));
+    const snapshotMs = Date.parse(synced.dataAsOf);
+    const asOf = Number.isNaN(snapshotMs) ? now : new Date(Math.min(now.getTime(), snapshotMs));
     const data = snapshotAt(this.deps.store.loadWindowData(synced.repo.id, window, asOf), asOf);
     const metrics = computeReviewFlow({ ...data, window, asOf, includeBots });
     return {

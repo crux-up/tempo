@@ -235,6 +235,13 @@ describe('GET /api/v1/repos/:owner/:repo/review-flow', () => {
     expect(team.awaitingFirstReview.medianAgeHours ?? 0).toBeGreaterThanOrEqual(0);
   });
 
+  it('falls back to the request time when dataAsOf is not a valid timestamp', async () => {
+    h.sync.dataAsOf = 'not-a-date';
+    const report = await h.reviewFlow.getReport({ owner: 'fastify', name: 'fastify' }, { from: '2026-03-02' });
+    expect(report.dataAsOf).toBe('not-a-date');
+    expect(report.team.prsOpened).toBe(4);
+  });
+
   it('redacts secret-named fields at the top level of a log entry', async () => {
     h.app.log.info({ token: TOKEN, githubToken: TOKEN, apiKey: TOKEN, anthropicApiKey: TOKEN }, 'secrets');
     const line = h.logs.find((l) => l.includes('"secrets"'));
@@ -276,5 +283,21 @@ describe('GET /api/v1/repos/:owner/:repo/review-flow', () => {
     const body = expectProblem(last!, 429, 'rate-limited');
     expect(body.title).toBe('Too many requests');
     expect(Number(last!.headers['retry-after'])).toBeGreaterThan(0);
+  });
+
+  it('counts percent-encoded API paths against the API budget', async () => {
+    const encoded = `/%61pi/v1/repos/fastify/fastify/review-flow?${WINDOW_QS}`;
+    const first = await get(encoded);
+    expect(first.statusCode).toBe(200);
+    expect(first.headers['x-ratelimit-remaining']).toBe('119');
+    let last: Res | undefined;
+    for (let i = 1; i < 121; i++) last = await get(encoded);
+    expectProblem(last!, 429, 'rate-limited');
+  });
+
+  it('counts percent-encoded unknown API paths against the API budget', async () => {
+    let last: Res | undefined;
+    for (let i = 0; i < 121; i++) last = await get('/%61pi/v1/nope');
+    expectProblem(last!, 429, 'rate-limited');
   });
 });
