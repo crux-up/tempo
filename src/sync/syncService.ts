@@ -1,5 +1,6 @@
 import type { RepoRecord, Store } from '../db/store.js';
 import type { Coverage, RepoRef, TimeWindow } from '../domain/types.js';
+import { UpstreamRateLimitedError } from '../errors.js';
 import type { GitHubSource } from '../github/client.js';
 import type { Logger } from '../logger.js';
 
@@ -19,10 +20,13 @@ type SyncDeps = {
 type PassResult = { covered: number; stopped: boolean };
 
 const SECOND_MS = 1000;
+/** Below this many GitHub points left, syncs stop early and keep the rest of the token's hourly quota in reserve. */
+const QUOTA_FLOOR = 100;
 
 /**
  * Shared request/time budget for one run, in GitHub requests (`maxPages`): a page costs every request it took,
- * retries and review follow-ups included. Checked after each page, so each pass fetches at least one page.
+ * retries and review follow-ups included. A GitHub quota below the floor also spends it. Checked after each page,
+ * so each pass fetches at least one page.
  */
 class Budget {
   private pages = 0;
@@ -32,6 +36,7 @@ class Budget {
     private readonly maxPages: number,
     private readonly maxMs: number,
     private readonly now: () => Date,
+    private readonly quotaLow: () => boolean,
   ) {
     this.startedAt = now().getTime();
   }
@@ -39,7 +44,7 @@ class Budget {
   /** Counts the requests one fetched page took and reports whether the budget is now spent. */
   spend(requests: number): boolean {
     this.pages += requests;
-    return this.pages >= this.maxPages || this.now().getTime() - this.startedAt >= this.maxMs;
+    return this.pages >= this.maxPages || this.now().getTime() - this.startedAt >= this.maxMs || this.quotaLow();
   }
 
   get pagesUsed(): number {
@@ -120,10 +125,13 @@ export class SyncService {
   /** Syncs what `window` needs and reports whether the budget cut any pass short. */
   private async run(key: string, ref: RepoRef, window: TimeWindow): Promise<boolean> {
     const { store, logger } = this.deps;
-    const budget = new Budget(this.deps.maxPages, this.deps.maxSeconds * 1000, this.now);
+    const quotaLow = () => this.msUntilQuotaReset(this.now().getTime()) !== null;
+    const budget = new Budget(this.deps.maxPages, this.deps.maxSeconds * 1000, this.now, quotaLow);
     const startedAt = budget.startedAt;
     const stored = store.getRepo(key);
     if (stored && !this.hasWork(stored, window, startedAt)) return false;
+    const resetIn = this.msUntilQuotaReset(startedAt);
+    if (resetIn !== null) throw new UpstreamRateLimitedError(Math.max(1, Math.ceil(resetIn / SECOND_MS)));
     // Every run that fetches re-checks the repository, so one made private since the last run stops being served
     // (one extra request per TTL). The check also picks up a renamed default branch.
     const repo = await this.register(key, ref);
@@ -220,6 +228,14 @@ export class SyncService {
       if (spent) return { covered: Math.max(since, oldest + SECOND_MS), stopped: true };
     }
     return { covered: since, stopped: false };
+  }
+
+  /** Time until the GitHub quota resets while it is below the floor; null when it is above, unknown or reset. */
+  private msUntilQuotaReset(at: number): number | null {
+    const quota = this.deps.github.quota();
+    if (!quota || quota.remaining >= QUOTA_FLOOR) return null;
+    const resetAt = Date.parse(quota.resetAt);
+    return Number.isNaN(resetAt) || resetAt <= at ? null : resetAt - at;
   }
 
   private async register(key: string, ref: RepoRef): Promise<RepoRecord> {

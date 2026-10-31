@@ -128,6 +128,13 @@ describe('getRepository', () => {
     expect(JSON.stringify(h.logs)).not.toContain(TOKEN);
   });
 
+  it('reports the last rate limit GitHub returned, and null before any response', async () => {
+    const h = harness([repoOk()]);
+    expect(h.client.quota()).toBeNull();
+    await h.client.getRepository(repo);
+    expect(h.client.quota()).toEqual({ remaining: 4990, resetAt: '2026-03-10T13:00:00Z' });
+  });
+
   it('maps repository null to RepoNotFoundError', async () => {
     const h = harness([json({ data: { repository: null, rateLimit } })]);
     await expect(h.client.getRepository(repo)).rejects.toBeInstanceOf(RepoNotFoundError);

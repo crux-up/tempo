@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../../src/db/database.js';
 import { Store } from '../../src/db/store.js';
 import type { CommitRow, PullRequestRow, RepoRef, ReviewRow } from '../../src/domain/types.js';
-import { RepoNotFoundError, UpstreamError } from '../../src/errors.js';
+import { RepoNotFoundError, UpstreamError, UpstreamRateLimitedError } from '../../src/errors.js';
 import type { GitHubSource } from '../../src/github/client.js';
 import type { Logger } from '../../src/logger.js';
 import { SyncService } from '../../src/sync/syncService.js';
@@ -54,6 +54,12 @@ class FakeGitHub implements GitHubSource {
   failPrPageAt: number | null = null;
   failCommits = false;
   turnedPrivate = false;
+  quotaLeft: { remaining: number; resetAt: string } | null = null;
+
+  quota() {
+    return this.quotaLeft;
+  }
+
   defaultBranch = 'main';
   onPage: () => void = () => {};
   repoCalls: RepoRef[] = [];
@@ -269,6 +275,37 @@ describe('SyncService', () => {
     github.prPages[0] = { ...github.prPages[0]!, requests: 3 };
 
     const result = await service({ maxPages: 3 }).ensureSynced(REPO, MARCH);
+
+    expect(github.prPagesPulled).toBe(1);
+    expect(result.coverage).toMatchObject({ partial: true, from: '2026-03-20T00:00:01.000Z' });
+  });
+
+  it('answers 503 with Retry-After until the reset when the GitHub quota is below the floor before a run', async () => {
+    github.quotaLeft = { remaining: 99, resetAt: '2026-03-31T12:10:00Z' };
+
+    const error = await service()
+      .ensureSynced(REPO, MARCH)
+      .catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(UpstreamRateLimitedError);
+    expect((error as UpstreamRateLimitedError).retryAfterSeconds).toBe(600);
+    expect(github.totalCalls).toBe(0);
+  });
+
+  it('syncs normally once the quota reset time has passed', async () => {
+    github.quotaLeft = { remaining: 0, resetAt: '2026-03-31T11:59:00Z' };
+
+    const result = await service().ensureSynced(REPO, MARCH);
+
+    expect(result.coverage.partial).toBe(false);
+  });
+
+  it('stops as if the budget ran out when the GitHub quota falls below the floor during a run', async () => {
+    github.onPage = () => {
+      github.quotaLeft = { remaining: 99, resetAt: '2026-03-31T13:00:00Z' };
+    };
+
+    const result = await service().ensureSynced(REPO, MARCH);
 
     expect(github.prPagesPulled).toBe(1);
     expect(result.coverage).toMatchObject({ partial: true, from: '2026-03-20T00:00:01.000Z' });

@@ -23,11 +23,15 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const RETRY_DELAYS_MS = [500, 1500];
 const DEFAULT_RETRY_AFTER_SECONDS = 60;
 
+export type GitHubQuota = { remaining: number; resetAt: string };
+
 /**
  * Every page carries `requests`: the HTTP requests GitHub answered to build it, retries and review follow-up pages
  * included, so a caller can budget real upstream work rather than pages.
  */
 export interface GitHubSource {
+  /** The rate limit GitHub reported on its latest response, or null before the first response. */
+  quota(): GitHubQuota | null;
   getRepository(repo: RepoRef): Promise<{ owner: string; name: string; defaultBranch: string }>;
   /**
    * Pages PRs ordered by UPDATED_AT DESC; yields each page and the caller stops iterating. `after` resumes after a
@@ -75,6 +79,7 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const now = opts.now ?? Date.now;
   const { logger } = opts;
+  let lastQuota: GitHubQuota | null = null;
 
   function rateLimitedFromHeaders(headers: Headers): UpstreamRateLimitedError | null {
     const retryAfter = headers.get('retry-after');
@@ -154,7 +159,12 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
     if (!result.data) throw new UpstreamError('GitHub returned an empty response');
 
     const rateLimit = result.data.rateLimit as { remaining?: number; resetAt?: string } | undefined;
-    if (rateLimit) logger.debug({ remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }, 'GitHub rate limit');
+    if (rateLimit) {
+      logger.debug({ remaining: rateLimit.remaining, resetAt: rateLimit.resetAt }, 'GitHub rate limit');
+      if (typeof rateLimit.remaining === 'number' && typeof rateLimit.resetAt === 'string') {
+        lastQuota = { remaining: rateLimit.remaining, resetAt: rateLimit.resetAt };
+      }
+    }
     return result.data;
   }
 
@@ -174,6 +184,8 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
   }
 
   return {
+    quota: () => lastQuota,
+
     async getRepository(repo) {
       const data = await request(REPOSITORY_QUERY, { owner: repo.owner, name: repo.name }, label(repo));
       const repository = data.repository as {
