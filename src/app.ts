@@ -50,7 +50,6 @@ const RATE_LIMIT_PER_MINUTE = 120;
 /** Covers the longest request: a narrative waits up to about 150 seconds for the model. */
 const REQUEST_TIMEOUT_MS = 180_000;
 const CONNECTION_TIMEOUT_MS = 10_000;
-const PROBE_PATHS = new Set(['/healthz', '/readyz']);
 /** Route pattern @fastify/static registers for `prefix: '/'`. */
 const STATIC_CATCH_ALL = '/*';
 
@@ -118,7 +117,7 @@ function hostName(host: string): string {
 /**
  * Refuses requests a web page in the operator's browser could send. A Host outside `allowedHosts` means DNS
  * rebinding (or a misrouted request) and is refused everywhere. `Sec-Fetch-Site: cross-site` means another site
- * made the browser call the API; GETs here start syncs and model calls, so the API refuses it. The probes accept
+ * made the browser call the API; GETs here start syncs and model calls, so the API refuses it. Pages and probes accept
  * it: they do no work. Runs before the rate limiter, so refused requests spend no client budget.
  */
 function guardRequest(request: FastifyRequest, allowedHosts: ReadonlySet<string>): void {
@@ -127,7 +126,7 @@ function guardRequest(request: FastifyRequest, allowedHosts: ReadonlySet<string>
   if (!allowedHosts.has(raw) || !allowedHosts.has(hostName(request.host))) {
     throw new ForbiddenRequestError('The Host header is not allowed');
   }
-  if (request.headers['sec-fetch-site'] === 'cross-site' && !PROBE_PATHS.has(requestPath(request))) {
+  if (request.headers['sec-fetch-site'] === 'cross-site' && targetsApi(request)) {
     throw new ForbiddenRequestError('Cross-site requests to the API are not allowed');
   }
 }

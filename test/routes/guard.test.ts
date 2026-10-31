@@ -49,6 +49,14 @@ describe('cross-site and DNS-rebinding guard', () => {
     expect((await get(API)).headers['x-ratelimit-remaining']).toBe('116');
   });
 
+  it('lets a cross-site navigation load the dashboard but refuses the API', async () => {
+    h = await createHarness();
+    const navigate = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', accept: 'text/html' };
+    expect((await get('/?repo=fastify/fastify', navigate)).statusCode).toBe(200);
+    expectForbidden(await get(API, navigate));
+    expectForbidden(await get('/api/v1/nothing', navigate));
+  });
+
   it('lets cross-site requests reach the probes', async () => {
     h = await createHarness();
     expect((await get('/healthz', { 'sec-fetch-site': 'cross-site' })).statusCode).toBe(200);
