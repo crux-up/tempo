@@ -96,3 +96,20 @@ export type MetricsInput = {
   asOf: Date;
   includeBots: boolean;
 };
+
+/** Query of a review-flow report, as the HTTP layer passes it on: the window bounds and the bot setting. */
+export type ReviewFlowQuery = { from?: string; to?: string; includeBots?: 'true' | 'false' };
+
+/** A review-flow query plus the narrative's cache bypass. */
+export type NarrativeQuery = ReviewFlowQuery & { refresh?: 'true' | 'false' };
+
+/** The part of a report's window that stored data backs. */
+export type Coverage = { partial: boolean; from: string; to: string };
+
+export type ReviewFlowReport = ReviewFlowMetrics & {
+  repo: string;
+  window: { from: string; to: string };
+  dataAsOf: string;
+  coverage: Coverage;
+  includeBots: boolean;
+};

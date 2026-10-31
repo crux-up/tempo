@@ -1,6 +1,6 @@
 import type { PersonStats } from '../../src/domain/types.js';
 import { computeReviewFlow } from '../../src/metrics/reviewFlow.js';
-import type { ReviewFlowReport } from '../../src/services/reviewFlowService.js';
+import type { ReviewFlowReport } from '../../src/domain/types.js';
 import { smallRepo, WINDOW } from '../fixtures/smallRepo.js';
 
 export const smallReport = (): ReviewFlowReport => ({

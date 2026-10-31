@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
-import { ReviewFlowQuery, ReviewFlowReportSchema, RepoParams } from '../http/params.js';
+import { ReviewFlowQuerySchema, ReviewFlowReportSchema, RepoParams } from '../http/params.js';
 import { jsonResponse, problemResponse } from '../http/problem.js';
 import type { ReviewFlowService } from '../services/reviewFlowService.js';
 
@@ -14,7 +14,7 @@ export const reviewFlowRoutes: FastifyPluginAsyncZod<{ reviewFlow: ReviewFlowSer
           'TTL), then returns team, per-person and weekly review-flow metrics.',
         tags: ['metrics'],
         params: RepoParams,
-        querystring: ReviewFlowQuery,
+        querystring: ReviewFlowQuerySchema,
         response: {
           200: jsonResponse('Review-flow report for the resolved window', ReviewFlowReportSchema),
           400: problemResponse('Invalid repository path or query parameters'),

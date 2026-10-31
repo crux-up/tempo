@@ -1,5 +1,6 @@
 import type { z } from 'zod';
-import type { NarrativeResponseSchema, ReviewFlowReportSchema } from '@api/http/params.js';
+import type { ReviewFlowReportSchema } from '@api/http/params.js';
+import type { NarrativeResponseSchema } from '@api/narrative/response.js';
 
 export type ReviewFlowReport = z.infer<typeof ReviewFlowReportSchema>;
 export type Narrative = z.infer<typeof NarrativeResponseSchema>;

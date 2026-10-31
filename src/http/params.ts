@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { CoverageSchema, nonNegativeInt, ratio, WindowSchema } from '../domain/schemas.js';
+import type { NarrativeQuery, ReviewFlowQuery, ReviewFlowReport } from '../domain/types.js';
+
+/* Request and response schemas of the HTTP API; each one is checked against the domain type it carries. */
 
 const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const NAME = /^[A-Za-z0-9._-]{1,100}$/;
@@ -12,7 +16,7 @@ export const RepoParams = z.object({
     .describe('Repository name, e.g. fastify'),
 });
 
-export const ReviewFlowQuery = z.object({
+export const ReviewFlowQuerySchema = z.object({
   from: z
     .string()
     .optional()
@@ -28,13 +32,9 @@ export const ReviewFlowQuery = z.object({
     .enum(['true', 'false'])
     .optional()
     .describe('Count bot accounts as people. Default: false.'),
-});
+}) satisfies z.ZodType<ReviewFlowQuery>;
 
-export type ReviewFlowQuery = z.infer<typeof ReviewFlowQuery>;
-
-const nonNegativeInt = z.number().int().nonnegative();
 const hours = z.number().nonnegative().nullable();
-const ratio = z.number().min(0).max(1);
 
 const DurationStatSchema = z.object({ medianHours: hours, p90Hours: hours, sampleSize: nonNegativeInt });
 
@@ -82,14 +82,10 @@ const TeamStatsSchema = z.object({
   }),
 });
 
-const CoverageSchema = z
-  .object({ partial: z.boolean(), from: z.iso.datetime(), to: z.iso.datetime() })
-  .describe('Part of the window backed by synced data; partial when a sync budget cut the backfill short');
-
 export const ReviewFlowReportSchema = z
   .object({
     repo: z.string().describe('Canonical owner/name as GitHub reports it'),
-    window: z.object({ from: z.iso.datetime(), to: z.iso.datetime() }).describe('Resolved half-open UTC window'),
+    window: WindowSchema.describe('Resolved half-open UTC window'),
     dataAsOf: z.iso.datetime().describe('When the stored data was last synced from GitHub'),
     coverage: CoverageSchema,
     includeBots: z.boolean(),
@@ -98,55 +94,14 @@ export const ReviewFlowReportSchema = z
     totals: TotalsSchema,
     weekly: z.array(WeekStatsSchema),
   })
-  .meta({ id: 'ReviewFlowReport' });
+  .meta({ id: 'ReviewFlowReport' }) satisfies z.ZodType<ReviewFlowReport>;
 
 export const HealthSchema = z.object({ status: z.literal('ok') });
 export const ReadySchema = z.object({ status: z.literal('ready') });
 
-export const NarrativeQuery = ReviewFlowQuery.extend({
+export const NarrativeQuerySchema = ReviewFlowQuerySchema.extend({
   refresh: z
     .enum(['true', 'false'])
     .optional()
     .describe('Generate a new narrative even when a cached one exists. Default: false.'),
-});
-
-const EvidenceSchema = z.object({
-  factId: z.string(),
-  label: z.string(),
-  value: z.union([z.number(), z.string()]).nullable().describe('The fact value from the metrics, not from the model'),
-  unit: z
-    .enum(['count', 'hours', 'share', 'login', 'week', 'datetime'])
-    .describe('A share is a fraction from 0 to 1; a datetime is an ISO-8601 UTC instant'),
-});
-
-export const NarrativeResponseSchema = z
-  .object({
-    repo: z.string(),
-    window: z.object({ from: z.iso.datetime(), to: z.iso.datetime() }),
-    dataAsOf: z.iso.datetime(),
-    coverage: CoverageSchema,
-    summary: z.string(),
-    findings: z.array(z.object({ claim: z.string(), evidence: z.array(EvidenceSchema) })),
-    hypothesis: z
-      .object({
-        statement: z.string(),
-        confidence: ratio.describe('0 to 1, after the cap for small samples'),
-        reasoning: z.string(),
-        evidence: z.array(EvidenceSchema),
-        alternatives: z.array(z.string()),
-      })
-      .nullable(),
-    caveats: z.array(z.string()),
-    verification: z
-      .object({
-        droppedFindings: nonNegativeInt,
-        droppedEvidenceIds: z.array(z.string()).describe('Cited ids that are unknown or have no value (at most 20)'),
-        confidenceCapped: z.object({ from: ratio, to: ratio, reason: z.string() }).nullable(),
-      })
-      .describe('What the server removed or changed in the model output before returning it'),
-    model: z.string().describe('Model that wrote the narrative, or "none" when no model was called'),
-    promptVersion: z.string(),
-    cached: z.boolean(),
-    generatedAt: z.iso.datetime(),
-  })
-  .meta({ id: 'Narrative' });
+}) satisfies z.ZodType<NarrativeQuery>;

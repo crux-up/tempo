@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { WeekStats } from '../../src/domain/types.js';
 import { buildFactSheet, type Fact, type FactSheet } from '../../src/narrative/factSheet.js';
-import type { ReviewFlowReport } from '../../src/services/reviewFlowService.js';
+import type { ReviewFlowReport } from '../../src/domain/types.js';
 import { personRow, smallReport } from './reportFixture.js';
 
 const LOGIN = /^[A-Za-z0-9-]+(\[bot\])?$/;

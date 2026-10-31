@@ -1,13 +1,13 @@
 import { createHash } from 'node:crypto';
 import type { Store } from '../db/store.js';
-import type { RepoRef } from '../domain/types.js';
-import { NarrativeResponseSchema, type ReviewFlowQuery } from '../http/params.js';
+import type { Coverage, NarrativeQuery, RepoRef, ReviewFlowQuery, ReviewFlowReport } from '../domain/types.js';
 import type { Logger } from '../logger.js';
-import type { ReviewFlowReport, ReviewFlowService } from '../services/reviewFlowService.js';
-import { repoKey, type Coverage } from '../sync/syncService.js';
+import type { ReviewFlowService } from '../services/reviewFlowService.js';
+import { repoKey } from '../sync/syncService.js';
 import { buildFactSheet, type FactSheet } from './factSheet.js';
 import type { NarrativeModel, TokenUsage } from './llmClient.js';
 import { PROMPT_VERSION } from './prompt.js';
+import { NarrativeResponseSchema } from './response.js';
 import { VERIFIER_VERSION, verifyNarrative, type Narrative } from './verify.js';
 
 export type NarrativeResponse = Narrative & {
@@ -20,8 +20,6 @@ export type NarrativeResponse = Narrative & {
   cached: boolean;
   generatedAt: string;
 };
-
-export type NarrativeQuery = ReviewFlowQuery & { refresh?: 'true' | 'false' };
 
 type NarrativeDeps = {
   model: NarrativeModel;

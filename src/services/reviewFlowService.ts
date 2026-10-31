@@ -1,17 +1,8 @@
 import type { Store } from '../db/store.js';
-import type { RepoRef, ReviewFlowMetrics, TimeWindow } from '../domain/types.js';
+import type { RepoRef, ReviewFlowQuery, ReviewFlowReport, TimeWindow } from '../domain/types.js';
 import { parseWindow } from '../domain/window.js';
-import type { ReviewFlowQuery } from '../http/params.js';
 import { computeReviewFlow } from '../metrics/reviewFlow.js';
-import { coverageOf, repoKey, type Coverage, type SyncResult, type SyncService } from '../sync/syncService.js';
-
-export type ReviewFlowReport = ReviewFlowMetrics & {
-  repo: string;
-  window: { from: string; to: string };
-  dataAsOf: string;
-  coverage: Coverage;
-  includeBots: boolean;
-};
+import { coverageOf, repoKey, type SyncResult, type SyncService } from '../sync/syncService.js';
 
 type ReviewFlowDeps = {
   store: Store;

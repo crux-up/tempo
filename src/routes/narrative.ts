@@ -1,8 +1,9 @@
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { NotConfiguredError } from '../errors.js';
-import { NarrativeQuery, NarrativeResponseSchema, RepoParams } from '../http/params.js';
+import { NarrativeQuerySchema, RepoParams } from '../http/params.js';
 import { jsonResponse, problemResponse } from '../http/problem.js';
 import type { NarrativeService } from '../narrative/narrativeService.js';
+import { NarrativeResponseSchema } from '../narrative/response.js';
 
 /** Each uncached request costs a model call, so this route has a far smaller budget than the rest of the API. */
 const NARRATIVE_RATE_LIMIT_PER_MINUTE = 10;
@@ -24,7 +25,7 @@ export const narrativeRoutes: FastifyPluginAsyncZod<{ narrative: NarrativeServic
           `with 502. Limited to ${NARRATIVE_RATE_LIMIT_PER_MINUTE} requests per minute per client.`,
         tags: ['metrics'],
         params: RepoParams,
-        querystring: NarrativeQuery,
+        querystring: NarrativeQuerySchema,
         response: {
           200: jsonResponse('Verified narrative for the resolved window', NarrativeResponseSchema),
           400: problemResponse('Invalid repository path or query parameters'),

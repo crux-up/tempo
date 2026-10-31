@@ -1,9 +1,8 @@
 import type { RepoRecord, Store } from '../db/store.js';
-import type { RepoRef, TimeWindow } from '../domain/types.js';
+import type { Coverage, RepoRef, TimeWindow } from '../domain/types.js';
 import type { GitHubSource } from '../github/client.js';
 import type { Logger } from '../logger.js';
 
-export type Coverage = { partial: boolean; from: string; to: string };
 export type SyncResult = { repo: RepoRecord; dataAsOf: string; coverage: Coverage };
 
 type SyncDeps = {

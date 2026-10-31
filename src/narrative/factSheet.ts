@@ -1,5 +1,4 @@
-import type { PersonStats, TeamStats, WeekStats } from '../domain/types.js';
-import type { ReviewFlowReport } from '../services/reviewFlowService.js';
+import type { PersonStats, ReviewFlowReport, TeamStats, WeekStats } from '../domain/types.js';
 
 export type Fact = {
   id: string;

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { LlmError, NotConfiguredError, UpstreamRateLimitedError } from '../../src/errors.js';
-import { NarrativeResponseSchema } from '../../src/http/params.js';
+import { NarrativeResponseSchema } from '../../src/narrative/response.js';
 import { FakeNarrativeModel } from '../narrative/fakes.js';
 import { createHarness, type Harness } from './harness.js';
 
