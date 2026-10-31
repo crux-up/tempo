@@ -126,6 +126,7 @@ export class Store {
   private readonly selectWindowCommits;
   private readonly selectNarrative;
   private readonly insertNarrative;
+  private readonly deleteNarrativesBefore;
   private readonly writePullRequests;
   private readonly writeCommits;
 
@@ -229,6 +230,8 @@ export class Store {
          prompt_version = excluded.prompt_version, created_at = excluded.created_at`,
     );
 
+    this.deleteNarrativesBefore = db.prepare<[string]>('DELETE FROM narratives WHERE created_at < ?');
+
     this.writePullRequests = db.transaction(
       (repoId: number, prs: PullRequestRow[], reviews: ReviewRow[]) => {
         for (const p of prs) {
@@ -319,6 +322,11 @@ export class Store {
       promptVersion: row.prompt_version,
       createdAt: row.created_at,
     };
+  }
+
+  /** Deletes narratives created before `cutoff`; returns how many. */
+  pruneNarratives(cutoff: Date): number {
+    return this.deleteNarrativesBefore.run(cutoff.toISOString()).changes;
   }
 
   saveNarrative(cacheKey: string, body: unknown, meta: { model: string; promptVersion: string }): void {

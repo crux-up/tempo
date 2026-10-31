@@ -202,6 +202,16 @@ describe('Store', () => {
     store.saveNarrative('k', { headline: 'b' }, { model: 'm2', promptVersion: 'v2' });
     expect(store.getNarrative('k')).toMatchObject({ body: { headline: 'b' }, model: 'm2', promptVersion: 'v2' });
   });
+
+  it('prunes narratives created before a cutoff and reports how many it removed', () => {
+    store.saveNarrative('old', { a: 1 }, { model: 'm', promptVersion: 'v' });
+    store.saveNarrative('new', { a: 2 }, { model: 'm', promptVersion: 'v' });
+    db.prepare("UPDATE narratives SET created_at = '2026-01-01T00:00:00.000Z' WHERE cache_key = 'old'").run();
+
+    expect(store.pruneNarratives(new Date('2026-02-01T00:00:00.000Z'))).toBe(1);
+    expect(store.getNarrative('old')).toBeNull();
+    expect(store.getNarrative('new')).not.toBeNull();
+  });
 });
 
 describe('openDatabase', () => {
