@@ -88,6 +88,16 @@ describe('server options', () => {
     expect(second.headers['x-ratelimit-remaining']).toBe('118');
   });
 
+  it('charges every address in one IPv6 /64 to one rate-limit key, and another /64 to its own', async () => {
+    h = await createHarness();
+    const from = (remoteAddress: string) => h!.app.inject({ method: 'GET', url: API, remoteAddress });
+    await from('2001:db8:1:2::1');
+    const sameHost = await from('2001:db8:1:2:ffff:ffff:ffff:ffff');
+    const otherHost = await from('2001:db8:1:3::1');
+    expect(sameHost.headers['x-ratelimit-remaining']).toBe('118');
+    expect(otherHost.headers['x-ratelimit-remaining']).toBe('119');
+  });
+
   it('ignores X-Forwarded-Host when no proxy is trusted: the raw Host decides', async () => {
     h = await createHarness();
     expect((await get(API, { host: 'localhost:3000', 'x-forwarded-host': 'evil.example' })).statusCode).toBe(200);

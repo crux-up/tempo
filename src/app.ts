@@ -18,6 +18,7 @@ import { pino, type DestinationStream, type Logger, type LoggerOptions } from 'p
 import type { Config } from './config.js';
 import type { Store } from './db/store.js';
 import { ForbiddenRequestError, TooManyRequestsError } from './errors.js';
+import { clientKey } from './http/clientKey.js';
 import { registerProblemHandlers, requestPath, sendFrameworkError, sendNotFound } from './http/problem.js';
 import type { NarrativeService } from './narrative/narrativeService.js';
 import { healthRoutes } from './routes/health.js';
@@ -175,6 +176,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     timeWindow: '1 minute',
     // Only the API is limited; static assets and the SPA shell are cheap and a page load fetches several.
     allowList: (request) => !targetsApi(request),
+    // The same key the narrative budgets charge, so one IPv6 /64 is one client everywhere.
+    keyGenerator: (request) => clientKey(request.ip),
     errorResponseBuilder: (_request, context) => new TooManyRequestsError(Math.max(1, Math.ceil(context.ttl / 1000))),
   });
 

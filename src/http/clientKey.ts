@@ -12,8 +12,9 @@ function hextets(ip: string): string[] {
 }
 
 /**
- * The client a per-client budget is charged to, keyed as the rate limiter keys it: an IPv4 address (IPv4-mapped
- * IPv6 included) as is, an IPv6 address by its /64 prefix, since one host usually controls a whole /64.
+ * The client a rate limit or per-client budget is charged to (the rate limiter's `keyGenerator` uses it too): an IPv4
+ * address (IPv4-mapped IPv6 included) as is, an IPv6 address by its /64 prefix, since one host usually controls a
+ * whole /64.
  */
 export function clientKey(ip: string): string {
   const mapped = V4_MAPPED.exec(ip);
