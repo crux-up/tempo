@@ -61,14 +61,35 @@ describe('server options', () => {
     expect(h.app.initialConfig).toMatchObject({ requestTimeout: 180_000, connectionTimeout: 10_000 });
   });
 
-  it('trusts X-Forwarded-For only when TRUST_PROXY is set', async () => {
+  it('trusts X-Forwarded-For only from the configured proxy hops', async () => {
     h = await createHarness();
     h.app.get('/ip', async (request) => ({ ip: request.ip }));
     expect((await get('/ip', { 'x-forwarded-for': '203.0.113.7' })).json()).not.toEqual({ ip: '203.0.113.7' });
     await h.close();
 
-    h = await createHarness({ config: { trustProxy: true } });
+    h = await createHarness({ config: { trustProxy: 1 } });
     h.app.get('/ip', async (request) => ({ ip: request.ip }));
-    expect((await get('/ip', { 'x-forwarded-for': '203.0.113.7' })).json()).toEqual({ ip: '203.0.113.7' });
+    const twoHops = { 'x-forwarded-for': '198.51.100.1, 203.0.113.7' };
+    expect((await get('/ip', twoHops)).json()).toEqual({ ip: '203.0.113.7' });
+  });
+
+  it('keeps one rate-limit key for a client that spoofs X-Forwarded-For when no proxy is trusted', async () => {
+    h = await createHarness();
+    await get(API, { 'x-forwarded-for': '198.51.100.1' });
+    const second = await get(API, { 'x-forwarded-for': '198.51.100.2' });
+    expect(second.headers['x-ratelimit-remaining']).toBe('118');
+  });
+
+  it('ignores X-Forwarded-Host when no proxy is trusted: the raw Host decides', async () => {
+    h = await createHarness();
+    expect((await get(API, { host: 'localhost:3000', 'x-forwarded-host': 'evil.example' })).statusCode).toBe(200);
+    expectForbidden(await get(API, { host: 'evil.example', 'x-forwarded-host': 'localhost' }));
+  });
+
+  it('checks both the raw Host and the forwarded host behind a trusted proxy', async () => {
+    h = await createHarness({ config: { trustProxy: 1 } });
+    expectForbidden(await get(API, { host: 'localhost:3000', 'x-forwarded-host': 'evil.example' }));
+    expectForbidden(await get(API, { host: 'evil.example', 'x-forwarded-host': 'localhost' }));
+    expect((await get(API, { host: 'localhost:3000', 'x-forwarded-host': '127.0.0.1:443' })).statusCode).toBe(200);
   });
 });

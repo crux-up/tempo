@@ -99,8 +99,21 @@ function targetsApi(request: FastifyRequest): boolean {
   }
 }
 
-/** Host name of the request without port or IPv6 brackets, lowercased; X-Forwarded-Host only with trustProxy. */
-const hostName = (request: FastifyRequest) => request.hostname.toLowerCase().replace(/^\[(.*)\]$/, '$1');
+/** Fastify takes a hop count as a function (its typings omit the number form): trust the nearest `hops` hops. */
+function fastifyTrustProxy(
+  setting: Config['trustProxy'],
+): false | string[] | ((address: string, hop: number) => boolean) {
+  if (typeof setting !== 'number') return setting;
+  return (_address, hop) => hop < setting;
+}
+
+/** A Host value without port or IPv6 brackets, lowercased. */
+function hostName(host: string): string {
+  const value = host.trim().toLowerCase();
+  if (value.startsWith('[')) return value.slice(1, value.indexOf(']'));
+  const colon = value.lastIndexOf(':');
+  return colon === -1 ? value : value.slice(0, colon);
+}
 
 /**
  * Refuses requests a web page in the operator's browser could send. A Host outside `allowedHosts` means DNS
@@ -109,7 +122,11 @@ const hostName = (request: FastifyRequest) => request.hostname.toLowerCase().rep
  * it: they do no work. Runs before the rate limiter, so refused requests spend no client budget.
  */
 function guardRequest(request: FastifyRequest, allowedHosts: ReadonlySet<string>): void {
-  if (!allowedHosts.has(hostName(request))) throw new ForbiddenRequestError('The Host header is not allowed');
+  // The raw Host header and the host Fastify derives (X-Forwarded-Host, from a trusted proxy only) must both pass.
+  const raw = hostName(request.headers.host ?? '');
+  if (!allowedHosts.has(raw) || !allowedHosts.has(hostName(request.host))) {
+    throw new ForbiddenRequestError('The Host header is not allowed');
+  }
   if (request.headers['sec-fetch-site'] === 'cross-site' && !PROBE_PATHS.has(requestPath(request))) {
     throw new ForbiddenRequestError('Cross-site requests to the API are not allowed');
   }
@@ -125,7 +142,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     frameworkErrors: sendFrameworkError,
     requestTimeout: REQUEST_TIMEOUT_MS,
     connectionTimeout: CONNECTION_TIMEOUT_MS,
-    trustProxy: deps.config.trustProxy,
+    trustProxy: fastifyTrustProxy(deps.config.trustProxy),
   });
 
   app.setValidatorCompiler(validatorCompiler);

@@ -37,9 +37,17 @@ describe('loadConfig', () => {
     );
   });
 
-  it('reads TRUST_PROXY as true or false only', () => {
-    expect(loadConfig({ GITHUB_TOKEN: 'x', TRUST_PROXY: 'true' }).trustProxy).toBe(true);
-    expect(() => loadConfig({ GITHUB_TOKEN: 'x', TRUST_PROXY: 'yes' })).toThrow(/TRUST_PROXY/);
+  it('reads TRUST_PROXY as false, a hop count or a list of proxy addresses, never as true', () => {
+    expect(loadConfig({ GITHUB_TOKEN: 'x', TRUST_PROXY: 'false' }).trustProxy).toBe(false);
+    expect(loadConfig({ GITHUB_TOKEN: 'x', TRUST_PROXY: '2' }).trustProxy).toBe(2);
+    expect(loadConfig({ GITHUB_TOKEN: 'x', TRUST_PROXY: ' 10.0.0.0/8, 127.0.0.1 ,::1' }).trustProxy).toEqual([
+      '10.0.0.0/8',
+      '127.0.0.1',
+      '::1',
+    ]);
+    for (const value of ['true', 'yes', '0', '-1', '10.0.0.0/8,evil.example', '10.0.0.0/99', ',']) {
+      expect(() => loadConfig({ GITHUB_TOKEN: 'x', TRUST_PROXY: value }), value).toThrow(/TRUST_PROXY/);
+    }
   });
 
   it('reads NARRATIVE_MAX_PER_HOUR as a positive integer', () => {

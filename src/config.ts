@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { isIP } from 'node:net';
 import { z } from 'zod';
 import { ConfigError } from './errors.js';
 
@@ -18,8 +19,11 @@ export type Config = {
   narrativeMaxPerClientPerHour: number;
   /** Host names (any port) the server answers to; anything else is refused, which stops DNS rebinding. */
   allowedHosts: string[];
-  /** Trust X-Forwarded-* headers: set only behind a reverse proxy that writes them. */
-  trustProxy: boolean;
+  /**
+   * Which proxies may set X-Forwarded-For/-Host: none (`false`), the nearest N hops, or proxy addresses and CIDR
+   * ranges. Never "every hop", which would let any client spoof its address and Host.
+   */
+  trustProxy: false | number | string[];
   logLevel: string;
 };
 
@@ -45,6 +49,32 @@ const hostList = (fallback: string) =>
       .pipe(z.array(z.string().regex(HOST_NAME)).min(1)),
   );
 
+/** An IP address, optionally with a CIDR prefix that fits its family. */
+function isAddressOrCidr(entry: string): boolean {
+  const [address = '', prefix, ...rest] = entry.split('/');
+  const family = isIP(address);
+  if (family === 0 || rest.length > 0) return false;
+  if (prefix === undefined) return true;
+  return /^\d{1,3}$/.test(prefix) && Number(prefix) <= (family === 4 ? 32 : 128);
+}
+
+/** `false`, a positive hop count, or a comma-separated list of proxy addresses and CIDR ranges. */
+const trustProxy = z.preprocess(
+  blankToUndefined,
+  z
+    .string()
+    .default('false')
+    .transform((value, ctx): false | number | string[] => {
+      const trimmed = value.trim();
+      if (trimmed === 'false') return false;
+      if (/^\d+$/.test(trimmed) && Number(trimmed) > 0) return Number(trimmed);
+      const entries = trimmed.split(',').map((entry) => entry.trim());
+      if (entries.every(isAddressOrCidr)) return entries;
+      ctx.addIssue({ code: 'custom', message: 'must be false, a hop count or a list of IP addresses or CIDRs' });
+      return z.NEVER;
+    }),
+);
+
 const envSchema = z.object({
   GITHUB_TOKEN: z.string().min(1),
   ANTHROPIC_API_KEY: z.preprocess(blankToUndefined, z.string().optional()),
@@ -64,7 +94,7 @@ const envSchema = z.object({
   NARRATIVE_MAX_PER_HOUR: positiveInt(30),
   NARRATIVE_MAX_PER_CLIENT_PER_HOUR: positiveInt(10),
   ALLOWED_HOSTS: hostList('localhost,127.0.0.1'),
-  TRUST_PROXY: z.preprocess(blankToUndefined, z.enum(['true', 'false']).default('false')),
+  TRUST_PROXY: trustProxy,
   LOG_LEVEL: z.preprocess(
     blankToUndefined,
     z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -95,7 +125,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     narrativeMaxPerHour: e.NARRATIVE_MAX_PER_HOUR,
     narrativeMaxPerClientPerHour: e.NARRATIVE_MAX_PER_CLIENT_PER_HOUR,
     allowedHosts: e.ALLOWED_HOSTS,
-    trustProxy: e.TRUST_PROXY === 'true',
+    trustProxy: e.TRUST_PROXY,
     logLevel: e.LOG_LEVEL,
   };
 }
