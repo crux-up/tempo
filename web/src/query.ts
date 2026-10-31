@@ -71,3 +71,12 @@ export function apiParams(query: Query): URLSearchParams {
     includeBots: String(query.includeBots),
   });
 }
+
+/**
+ * Why an explanation cannot be asked for, or null. It covers whole UTC days and the current day is not finished, so
+ * a range that starts today (or later) holds none. The server checks again and answers 400.
+ */
+export function narrativeBlock(range: Pick<Query, 'from' | 'to'>, now: Date = new Date()): string | null {
+  if (range.from < isoDay(now.getTime())) return null;
+  return 'An explanation covers whole UTC days, and today is not over yet. Start the range before today.';
+}

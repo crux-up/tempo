@@ -3,14 +3,24 @@ import { problemKind, type Problem } from '../api';
 
 /** What the person can do about each kind of problem; the server's own detail is always shown above it. */
 const NEXT_STEP: Record<string, string> = {
-  'github-token-rejected': 'Set a valid GITHUB_TOKEN for the server and restart it.',
-  'not-configured': 'The metrics still work; only the explanation needs the key.',
+  'github-token-rejected': 'Set a valid GITHUB_TOKEN in .env, then restart the service.',
+  'not-configured': 'The metrics still work; only the explanation needs the key. Set ANTHROPIC_API_KEY in .env, then restart the service.',
   'repo-not-found': 'Check the owner and name. Private repositories are not supported.',
   'invalid-request': 'Change the repository or the dates and try again.',
   'upstream-rate-limited': 'Data already synced stays available; new syncs wait for the limit to reset.',
+  'rate-limited': 'Too many requests from this browser. Wait a moment, then retry.',
+  'narrative-budget-exhausted':
+    'The hourly budget of new explanations is used up. The metrics still work, and an explanation already written is returned from cache.',
+  forbidden:
+    'The request was refused. Open the dashboard at the address the service is running on, not from another site or host name.',
   'llm-error': 'Try again; a new attempt makes a new request to the model.',
-  unreachable: 'Start the server with npm run dev, then retry.',
+  unreachable: 'Start the service, then retry.',
 };
+
+const NOT_RETRYABLE = new Set(['not-configured', 'repo-not-found', 'invalid-request', 'forbidden']);
+
+/** Short waits in seconds, long ones (an hourly budget) in minutes. */
+const wait = (seconds: number) => (seconds < 120 ? `${seconds} s` : `${Math.ceil(seconds / 60)} min`);
 
 function useCountdown(seconds: number | undefined) {
   const [left, setLeft] = useState(seconds ?? 0);
@@ -34,7 +44,7 @@ type ProblemNoticeProps = { problem: Problem; onRetry?: () => void; what: string
 export function ProblemNotice({ problem, onRetry, what }: ProblemNoticeProps) {
   const left = useCountdown(problem.retryAfterSeconds);
   const kind = problemKind(problem);
-  const retryable = kind !== 'not-configured' && kind !== 'repo-not-found' && kind !== 'invalid-request';
+  const retryable = !NOT_RETRYABLE.has(kind);
   return (
     <div className="problem" role="alert">
       <p className="problem-title">
@@ -49,7 +59,7 @@ export function ProblemNotice({ problem, onRetry, what }: ProblemNoticeProps) {
       <div className="problem-actions">
         {onRetry && retryable && (
           <button type="button" className="text-button" onClick={onRetry} disabled={left > 0}>
-            {left > 0 ? `Retry in ${left} s` : 'Retry'}
+            {left > 0 ? `Retry in ${wait(left)}` : 'Retry'}
           </button>
         )}
         {problem.requestId && (

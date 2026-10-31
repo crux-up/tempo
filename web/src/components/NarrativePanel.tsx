@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Problem } from '../api';
-import { dateTime, day, evidenceFigure, evidenceLabel, figureText, share } from '../format';
+import { dateTime, evidenceFigure, evidenceLabel, figureText, share, windowEnd, windowStart } from '../format';
 import type { Evidence, Narrative } from '../types';
 import { Num } from './Num';
 import { ProblemNotice } from './ProblemNotice';
@@ -120,7 +120,7 @@ function Result({ narrative, reportDataAsOf, onRegenerate, ...citing }: ResultPr
           <br />
           {dateTime(narrative.generatedAt)}
           <br />
-          Covers {day(narrative.window.from)} to {day(narrative.window.to)}
+          Covers {windowStart(narrative.window.from)} to {windowEnd(narrative.window.to)}
         </p>
         {onRegenerate && (
           <button type="button" className="button button-secondary" onClick={onRegenerate}>
@@ -198,6 +198,8 @@ function Result({ narrative, reportDataAsOf, onRegenerate, ...citing }: ResultPr
 type NarrativePanelProps = Citing & {
   state: NarrativeState;
   ready: boolean;
+  /** Why an explanation cannot be asked for with this range, or null. */
+  blockedReason: string | null;
   /** When the page's metrics were synced; an explanation of older data says so. */
   reportDataAsOf: string | null;
   onExplain: (refresh: boolean) => void;
@@ -205,7 +207,7 @@ type NarrativePanelProps = Citing & {
 };
 
 /** The "why": a model-written explanation whose numbers come only from the server-checked evidence. */
-export function NarrativePanel({ state, ready, reportDataAsOf, onExplain, onCancel, canCite, onCite }: NarrativePanelProps) {
+export function NarrativePanel({ state, ready, blockedReason, reportDataAsOf, onExplain, onCancel, canCite, onCite }: NarrativePanelProps) {
   const citing = { canCite, onCite };
   return (
     <section className="narrative" aria-labelledby="narrative-title" aria-busy={state.status === 'loading'}>
@@ -221,11 +223,13 @@ export function NarrativePanel({ state, ready, reportDataAsOf, onExplain, onCanc
 
       {state.status === 'idle' && (
         <div className="narrative-start">
-          <button type="button" className="button button-primary" onClick={() => onExplain(false)} disabled={!ready}>
+          <button type="button" className="button button-primary" onClick={() => onExplain(false)} disabled={!ready || blockedReason !== null}>
             Explain
           </button>
           <p className="section-note">
-            {ready
+            {blockedReason
+              ? blockedReason
+              : ready
               ? 'A summary, findings and a likely cause with its confidence, each backed by cited numbers. A cached explanation returns at once; a new one can take up to about 2 minutes.'
               : 'Available once the metrics have loaded.'}
           </p>

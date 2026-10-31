@@ -1,3 +1,4 @@
+import { PROBLEM_BASE } from '@api/errors.js';
 import { apiParams, type Query } from './query';
 import type { Narrative, ReviewFlowReport } from './types';
 
@@ -17,8 +18,6 @@ export class ProblemError extends Error {
     this.name = 'ProblemError';
   }
 }
-
-const PROBLEM_BASE = 'https://tempo.dev/problems/';
 
 /** The last segment of a Tempo problem type, such as `repo-not-found`; other types are returned as they are. */
 export const problemKind = (problem: Problem) =>

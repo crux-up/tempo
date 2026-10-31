@@ -1,3 +1,4 @@
+import { ordinal } from '@api/metrics/stats.js';
 import { useEffect, useState } from 'react';
 import { personFact, personRow } from '../facts';
 import { count, share } from '../format';
@@ -20,8 +21,15 @@ const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
 ];
 
 const sortValue = (p: Person, key: SortKey) => (key === 'balance' ? p.reviewShare - p.codeShare : p[key]);
+/** The chosen column first, then the API's own tie-break: PRs reviewed, PRs merged, login in code-unit order. */
 const sortedPeople = (people: Person[], key: SortKey) =>
-  [...people].sort((a, b) => sortValue(b, key) - sortValue(a, key) || a.login.localeCompare(b.login));
+  [...people].sort(
+    (a, b) =>
+      sortValue(b, key) - sortValue(a, key) ||
+      b.prsReviewed - a.prsReviewed ||
+      b.prsMerged - a.prsMerged ||
+      ordinal(a.login, b.login),
+  );
 const rowKey = (p: Person) => `${p.login}\u0000${p.unlinked ? 'git' : 'gh'}`;
 const isBot = (login: string) => login.endsWith('[bot]');
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { asProblem, fetchNarrative, fetchReport, type Problem } from './api';
 import { NarrativePanel, type NarrativeState } from './components/NarrativePanel';
+import { CoverageNotice } from './components/CoverageNotice';
 import { Num } from './components/Num';
 import { PeopleTable } from './components/PeopleTable';
 import { ProblemNotice } from './components/ProblemNotice';
@@ -9,8 +10,8 @@ import { TeamFigures } from './components/TeamFigures';
 import { TopBar } from './components/TopBar';
 import { WeeklyChart } from './components/WeeklyChart';
 import { FACT, factOnScreen, findFactElement, parseFact, unlinkedCommits, type FactTarget } from './facts';
-import { count, dateTime, day, figureText, hours, share } from './format';
-import { queryFromSearch, searchFromQuery, type Query } from './query';
+import { count, dateTime, day, figureText, hours, share, windowEnd, windowStart } from './format';
+import { narrativeBlock, queryFromSearch, searchFromQuery, type Query } from './query';
 import type { ReviewFlowReport } from './types';
 
 type ReportState =
@@ -186,14 +187,7 @@ export function App() {
 
         <QueryForm key={searchFromQuery(query)} query={query} busy={loading} onSubmit={submit} />
 
-        {report?.coverage.partial && (
-          <p className="notice" data-fact={FACT.coveragePartial}>
-            Partial data: synced history starts on{' '}
-            <strong data-fact={FACT.coverageFrom}>{dateTime(report.coverage.from)}</strong>, after the window&rsquo;s start
-            on {day(report.window.from)}. The sync budget stopped the backfill, so every number below leaves out the
-            weeks before that date.
-          </p>
-        )}
+        {report && <CoverageNotice coverage={report.coverage} window={report.window} />}
 
         {reportState.status === 'error' ? (
           <div className="body body-error">
@@ -211,7 +205,7 @@ export function App() {
                         <Num figure={{ value: count(report.team.prsOpened), unit: '' }} fact={FACT.prsOpened} /> PRs opened,{' '}
                         <Num figure={{ value: count(report.team.prsMerged), unit: '' }} fact={FACT.prsMerged} /> merged and{' '}
                         <Num figure={{ value: count(report.team.reviewsSubmitted), unit: '' }} fact={FACT.reviewsSubmitted} />{' '}
-                        reviews submitted from {day(report.window.from)} to {day(report.window.to)}
+                        reviews submitted from {windowStart(report.window.from)} to {windowEnd(report.window.to)}
                         {report.includeBots ? ', bots included.' : ', bots left out.'}
                       </>
                     ) : (
@@ -264,6 +258,7 @@ export function App() {
               <NarrativePanel
                 state={narrative}
                 ready={reportState.status === 'done'}
+                blockedReason={narrativeBlock(query)}
                 reportDataAsOf={report?.dataAsOf ?? null}
                 onExplain={explain}
                 onCancel={cancelNarrative}

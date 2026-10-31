@@ -38,6 +38,15 @@ export const day = (iso: string) => dateFormat.format(new Date(iso));
 export const dayShort = (iso: string) => shortDate.format(new Date(iso));
 export const dateTime = (iso: string) => `${dateFormat.format(new Date(iso))}, ${timeFormat.format(new Date(iso))} UTC`;
 
+const DAY_MS = 86_400_000;
+const atMidnight = (iso: string) => Date.parse(iso) % DAY_MS === 0;
+
+/** The API's window is [from, to). A start on a UTC midnight reads as that day; any other instant is shown exactly. */
+export const windowStart = (iso: string) => (atMidnight(iso) ? day(iso) : dateTime(iso));
+
+/** The exclusive end shown as the last included day, like the top bar; an end that is not a midnight is shown exactly. */
+export const windowEnd = (iso: string) => (atMidnight(iso) ? day(new Date(Date.parse(iso) - DAY_MS).toISOString()) : dateTime(iso));
+
 /**
  * Fact-sheet labels are written for the model ("Median hours to first review", "(fraction 0-1)"). On screen the value
  * carries its own unit, so the label drops the unit words.

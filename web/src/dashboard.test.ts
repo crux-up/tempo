@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { asProblem, fetchReport } from './api';
+import { asProblem, fetchReport, problemKind } from './api';
 import { hourTicks, labelEvery } from './chart';
 import { factOnScreen, parseFact } from './facts';
-import { evidenceFigure, evidenceLabel, figureText, hours, share } from './format';
-import { apiParams, parseRepo, queryFromSearch, searchFromQuery, validateWindow } from './query';
+import { day, evidenceFigure, evidenceLabel, figureText, hours, share, windowEnd, windowStart } from './format';
+import { apiParams, narrativeBlock, parseRepo, queryFromSearch, searchFromQuery, validateWindow } from './query';
 import type { ReviewFlowReport } from './types';
 
 describe('format', () => {
@@ -153,5 +153,41 @@ describe('api', () => {
     const query = { owner: 'a', repo: 'b', from: '2026-10-01', to: '2026-10-31', includeBots: false };
     const error = await fetchReport(query, controller.signal).catch((e: unknown) => e);
     expect(asProblem(error)).toBeNull();
+  });
+});
+
+describe('window labels', () => {
+  it('shows an exclusive midnight end as the last included day', () => {
+    expect(windowEnd('2026-10-31T00:00:00.000Z')).toBe('30 Oct 2026');
+    expect(windowEnd('2026-03-01T00:00:00.000Z')).toBe('28 Feb 2026');
+    expect(windowStart('2026-10-01T00:00:00.000Z')).toBe('1 Oct 2026');
+  });
+
+  it('shows any other end as its exact instant', () => {
+    expect(windowEnd('2026-10-31T08:15:00.000Z')).toBe('31 Oct 2026, 08:15 UTC');
+  });
+
+  it('agrees with the top bar for the same query', () => {
+    const query = { owner: 'a', repo: 'b', from: '2026-10-01', to: '2026-10-30', includeBots: false };
+    const sent = apiParams(query).get('to') as string;
+    expect(windowEnd(`${sent}T00:00:00.000Z`)).toBe(day(`${query.to}T00:00:00Z`));
+  });
+
+  it('blocks an explanation when the range starts today or later', () => {
+    const now = new Date('2026-10-31T08:00:00Z');
+    expect(narrativeBlock({ from: '2026-10-31', to: '2026-10-31' }, now)).toMatch(/whole UTC day/);
+    expect(narrativeBlock({ from: '2026-11-02', to: '2026-11-03' }, now)).toMatch(/whole UTC day/);
+    expect(narrativeBlock({ from: '2026-10-30', to: '2026-10-31' }, now)).toBeNull();
+    expect(narrativeBlock({ from: '2026-10-01', to: '2026-10-05' }, now)).toBeNull();
+  });
+});
+
+describe('problem types', () => {
+  const problem = (type: string) => ({ type, title: 't', status: 429, detail: 'd' });
+
+  it('reads the slug of a Tempo problem URN', () => {
+    expect(problemKind(problem('urn:tempo:problem:narrative-budget-exhausted'))).toBe('narrative-budget-exhausted');
+    expect(problemKind(problem('urn:tempo:problem:forbidden'))).toBe('forbidden');
+    expect(problemKind(problem('unreachable'))).toBe('unreachable');
   });
 });

@@ -26,6 +26,7 @@ export const FACT = {
   includeBots: 'meta.includeBots',
   coveragePartial: 'meta.coveragePartial',
   coverageFrom: 'meta.coverageFrom',
+  coverageTo: 'meta.coverageTo',
 } as const;
 
 export const personFact = (login: string, field: string) => `person.${login}.${field}`;
@@ -60,7 +61,9 @@ export function factOnScreen(id: string, report: ReviewFlowReport): boolean {
   if (!target) return false;
   if (target.kind === 'person') return report.people.some((p) => !p.unlinked && p.login === target.login);
   if (target.kind === 'week') return report.weekly.some((w) => w.week === target.week);
-  if (id === FACT.coverageFrom || id === FACT.coveragePartial) return report.coverage.partial;
+  if (id === FACT.coveragePartial) return report.coverage.partial;
+  if (id === FACT.coverageFrom) return report.coverage.partial && report.coverage.from > report.window.from;
+  if (id === FACT.coverageTo) return report.coverage.partial && report.coverage.to < report.window.to;
   if (id === FACT.unlinkedCommits) return unlinkedCommits(report) > 0;
   if (id === FACT.topReviewer) return report.team.reviewConcentration.topReviewer !== null;
   return TEAM_IDS.has(id);
