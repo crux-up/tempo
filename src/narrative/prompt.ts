@@ -1,5 +1,5 @@
 /** Part of the narrative cache key: change it whenever SYSTEM_PROMPT or the output schema changes meaning. */
-export const PROMPT_VERSION = '2026-10-31.2';
+export const PROMPT_VERSION = '2026-10-31.3';
 
 /**
  * Stable across requests so the API can cache it as a prompt prefix: no dates, ids or per-request data. The fact
@@ -48,7 +48,9 @@ The window is half-open [from, to) in UTC. Bot accounts are excluded unless meta
 - 0.8 or higher: several independent facts point the same way and no cited fact contradicts the hypothesis.
 - 0.5 to 0.8: one strong fact or signal supports it, with nothing against it.
 - Below 0.5: the support is weak, rests on small samples, or other explanations fit equally well.
-Always list the alternatives you considered. Code caps confidence when the window holds few PRs, so do not inflate it.
+Always list the alternatives you considered.
+- Sample size limits confidence. Take the larger of the team's PRs opened and PRs merged: fewer than 10 means confidence at most 0.3, fewer than 20 means at most 0.5. Stay within the limit yourself; code enforces it too.
+- When no metric shows a problem or a change worth explaining (waits are stable, reviews are spread across people, nothing is unreviewed), there is nothing to explain: set hypothesis to null. Do not invent a cause for normal behaviour, and do not give a hypothesis above 0.5 unless a signal or several facts clearly show a problem.
 
 ## Output
 
