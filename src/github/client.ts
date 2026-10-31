@@ -23,6 +23,10 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const RETRY_DELAYS_MS = [500, 1500];
 const DEFAULT_RETRY_AFTER_SECONDS = 60;
 
+/**
+ * Every page carries `requests`: the HTTP requests GitHub answered to build it, retries and review follow-up pages
+ * included, so a caller can budget real upstream work rather than pages.
+ */
 export interface GitHubSource {
   getRepository(repo: RepoRef): Promise<{ owner: string; name: string; defaultBranch: string }>;
   /**
@@ -37,8 +41,14 @@ export interface GitHubSource {
     reviews: ReviewRow[];
     oldestUpdatedAt: string | null;
     endCursor: string | null;
+    requests: number;
   }>;
-  commitPages(repo: RepoRef, branch: string, since: string, until: string): AsyncIterable<CommitRow[]>;
+  commitPages(
+    repo: RepoRef,
+    branch: string,
+    since: string,
+    until: string,
+  ): AsyncIterable<{ commits: CommitRow[]; requests: number }>;
 }
 
 type GitHubClientOptions = {
@@ -56,6 +66,9 @@ type GraphQlResponse = {
 };
 
 type Connection<T> = { pageInfo: RawPageInfo; nodes: T[] };
+
+/** Counts the HTTP requests made for one page. */
+type Meter = { requests: number };
 
 export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
   const fetchFn = opts.fetchFn ?? fetch;
@@ -79,7 +92,12 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
     return null;
   }
 
-  async function attempt(query: string, variables: Record<string, unknown>): Promise<GraphQlResponse | 'retry'> {
+  async function attempt(
+    query: string,
+    variables: Record<string, unknown>,
+    meter: Meter,
+  ): Promise<GraphQlResponse | 'retry'> {
+    meter.requests++;
     let response: Response;
     try {
       response = await fetchFn(GRAPHQL_URL, {
@@ -118,12 +136,13 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
     query: string,
     variables: Record<string, unknown>,
     repoLabel: string,
+    meter: Meter = { requests: 0 },
   ): Promise<Record<string, unknown>> {
-    let result = await attempt(query, variables);
+    let result = await attempt(query, variables, meter);
     for (const delay of RETRY_DELAYS_MS) {
       if (result !== 'retry') break;
       await sleep(delay);
-      result = await attempt(query, variables);
+      result = await attempt(query, variables, meter);
     }
     if (result === 'retry') throw new UpstreamError('GitHub is unavailable');
 
@@ -141,11 +160,11 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
 
   const label = (repo: RepoRef) => `${repo.owner}/${repo.name}`;
 
-  async function allReviews(prId: string, first: RawReviewConnection, repoLabel: string) {
+  async function allReviews(prId: string, first: RawReviewConnection, repoLabel: string, meter: Meter) {
     const nodes = [...first.nodes];
     let page = first.pageInfo;
     while (page.hasNextPage) {
-      const data = await request(REVIEWS_QUERY, { prId, cursor: page.endCursor }, repoLabel);
+      const data = await request(REVIEWS_QUERY, { prId, cursor: page.endCursor }, repoLabel, meter);
       const connection = (data.node as { reviews?: RawReviewConnection } | null)?.reviews;
       if (!connection) throw new UpstreamError('GitHub returned an unexpected review page');
       nodes.push(...connection.nodes);
@@ -172,7 +191,9 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
     async *pullRequestPages(repo, opts) {
       let cursor: string | null = opts?.after ?? null;
       for (;;) {
-        const data = await request(PULL_REQUESTS_QUERY, { owner: repo.owner, name: repo.name, cursor }, label(repo));
+        const meter: Meter = { requests: 0 };
+        const variables = { owner: repo.owner, name: repo.name, cursor };
+        const data = await request(PULL_REQUESTS_QUERY, variables, label(repo), meter);
         const repository = data.repository as { pullRequests: Connection<RawPullRequest> } | null;
         if (!repository) throw new RepoNotFoundError(label(repo));
         const { pageInfo, nodes } = repository.pullRequests;
@@ -181,10 +202,10 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
         const reviews: ReviewRow[] = [];
         for (const node of nodes) {
           pullRequests.push(mapPullRequest(node));
-          reviews.push(...mapReviews(node.id, await allReviews(node.id, node.reviews, label(repo))));
+          reviews.push(...mapReviews(node.id, await allReviews(node.id, node.reviews, label(repo), meter)));
         }
         const endCursor = pageInfo.hasNextPage ? pageInfo.endCursor : null;
-        yield { pullRequests, reviews, oldestUpdatedAt: oldestUpdatedAt(pullRequests), endCursor };
+        yield { pullRequests, reviews, oldestUpdatedAt: oldestUpdatedAt(pullRequests), endCursor, ...meter };
 
         if (endCursor === null) return;
         cursor = endCursor;
@@ -194,17 +215,19 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
     async *commitPages(repo, branch, since, until) {
       let cursor: string | null = null;
       for (;;) {
+        const meter: Meter = { requests: 0 };
         const data = await request(
           COMMITS_QUERY,
           { owner: repo.owner, name: repo.name, branch: `refs/heads/${branch}`, cursor, since, until },
           label(repo),
+          meter,
         );
         const repository = data.repository as { ref: { target: { history?: Connection<RawCommit> } } | null } | null;
         if (!repository) throw new RepoNotFoundError(label(repo));
         const history = repository.ref?.target.history;
         if (!history) return;
 
-        yield history.nodes.map(mapCommit);
+        yield { commits: history.nodes.map(mapCommit), ...meter };
 
         if (!history.pageInfo.hasNextPage) return;
         cursor = history.pageInfo.endCursor;

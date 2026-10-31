@@ -209,7 +209,7 @@ describe('pullRequestPages', () => {
   it('yields oldestUpdatedAt null for an empty page', async () => {
     const h = harness([prPage([], false, null)]);
     const pages = await collect(h.client.pullRequestPages(repo));
-    expect(pages).toEqual([{ pullRequests: [], reviews: [], oldestUpdatedAt: null, endCursor: null }]);
+    expect(pages).toEqual([{ pullRequests: [], reviews: [], oldestUpdatedAt: null, endCursor: null, requests: 1 }]);
   });
 
   it('starts after the given cursor when resuming', async () => {
@@ -257,6 +257,13 @@ describe('pullRequestPages', () => {
     expect(pages[0]?.reviews.every((r) => r.pullRequestId === 'PR_1')).toBe(true);
     expect(h.calls[1]?.body.variables).toEqual({ prId: 'PR_1', cursor: 'r1' });
     expect(h.calls[2]?.body.variables).toEqual({ prId: 'PR_1', cursor: 'r2' });
+    expect(pages[0]?.requests).toBe(3);
+  });
+
+  it('counts retries in the requests a page took', async () => {
+    const h = harness([new Response('bad gateway', { status: 502 }), prPage([rawPr('PR_1')], false, null)]);
+    const pages = await collect(h.client.pullRequestPages(repo));
+    expect(pages[0]?.requests).toBe(2);
   });
 
   it('maps a null author to ghost', async () => {
@@ -387,14 +394,15 @@ describe('commitPages', () => {
       h.client.commitPages(repo, 'main', '2026-03-01T00:00:00.000Z', '2026-04-01T00:00:00.000Z'),
     );
     expect(pages).toHaveLength(2);
-    expect(pages[0]?.map((c) => [c.sha, c.authorLogin, c.authorName, c.authorIsBot])).toEqual([
+    expect(pages.map((p) => p.requests)).toEqual([1, 1]);
+    expect(pages[0]?.commits.map((c) => [c.sha, c.authorLogin, c.authorName, c.authorIsBot])).toEqual([
       ['a1', 'alice', 'Alice A', false],
       ['a2', null, 'Stranger', false],
       ['a3', null, 'dependabot[bot]', true],
       ['a4', 'renovate[bot]', 'Renovate', true],
       ['a5', null, '', false],
     ]);
-    expect(pages[0]?.[0]).toEqual({
+    expect(pages[0]?.commits[0]).toEqual({
       sha: 'a1',
       authorLogin: 'alice',
       authorName: 'Alice A',
@@ -427,7 +435,7 @@ describe('commitPages', () => {
       ),
     ]);
     const [page] = await collect(h.client.commitPages(repo, 'main', 'a', 'b'));
-    expect(page?.map((c) => c.authorName)).toEqual(['adminnimdax', 'n'.repeat(100), `${'é'.repeat(99)}\u{1F600}`]);
+    expect(page?.commits.map((c) => c.authorName)).toEqual(['adminnimdax', 'n'.repeat(100), `${'é'.repeat(99)}\u{1F600}`]);
   });
 
   it('yields nothing when the branch does not exist', async () => {

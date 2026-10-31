@@ -29,8 +29,13 @@ const commit = (sha: string, committedAt: string): CommitRow => ({
   committedAt,
 });
 
-type PrPage = { pullRequests: PullRequestRow[]; reviews: ReviewRow[]; oldestUpdatedAt: string | null };
-type YieldedPage = PrPage & { endCursor: string | null };
+type PrPage = {
+  pullRequests: PullRequestRow[];
+  reviews: ReviewRow[];
+  oldestUpdatedAt: string | null;
+  requests?: number;
+};
+type YieldedPage = PrPage & { endCursor: string | null; requests: number };
 
 const page = (...prs: PullRequestRow[]): PrPage => ({
   pullRequests: prs,
@@ -70,11 +75,17 @@ class FakeGitHub implements GitHubSource {
       if (this.failPrPageAt === i) throw new UpstreamError('boom');
       this.prPagesPulled++;
       this.onPage();
-      yield { ...this.prPages[i]!, endCursor: i + 1 < this.prPages.length ? `p${i + 1}` : null };
+      const p = this.prPages[i]!;
+      yield { ...p, requests: p.requests ?? 1, endCursor: i + 1 < this.prPages.length ? `p${i + 1}` : null };
     }
   }
 
-  async *commitPages(_repo: RepoRef, branch: string, since: string, until: string): AsyncIterable<CommitRow[]> {
+  async *commitPages(
+    _repo: RepoRef,
+    branch: string,
+    since: string,
+    until: string,
+  ): AsyncIterable<{ commits: CommitRow[]; requests: number }> {
     this.commitCalls.push({ branch, since, until });
     if (this.failCommits) throw new UpstreamError('commits boom');
     const inRange = (c: CommitRow) => c.committedAt >= since && c.committedAt < until;
@@ -82,7 +93,7 @@ class FakeGitHub implements GitHubSource {
     for (const p of pages.length ? pages : [[]]) {
       this.commitPagesPulled++;
       this.onPage();
-      yield p;
+      yield { commits: p, requests: 1 };
     }
   }
 
@@ -225,6 +236,15 @@ describe('SyncService', () => {
       from: '2026-03-20T00:00:01.000Z',
       to: '2026-03-31T12:00:00.000Z',
     });
+  });
+
+  it('counts review follow-up requests and retries of a page against the page budget', async () => {
+    github.prPages[0] = { ...github.prPages[0]!, requests: 3 };
+
+    const result = await service({ maxPages: 3 }).ensureSynced(REPO, MARCH);
+
+    expect(github.prPagesPulled).toBe(1);
+    expect(result.coverage).toMatchObject({ partial: true, from: '2026-03-20T00:00:01.000Z' });
   });
 
   it('stops when maxSeconds has elapsed, measured with the injected clock', async () => {

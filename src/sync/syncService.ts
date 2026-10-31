@@ -20,7 +20,10 @@ type PassResult = { covered: number; stopped: boolean };
 
 const SECOND_MS = 1000;
 
-/** Shared page/time budget for one run; checked after each page, so each pass fetches at least one page. */
+/**
+ * Shared request/time budget for one run, in GitHub requests (`maxPages`): a page costs every request it took,
+ * retries and review follow-ups included. Checked after each page, so each pass fetches at least one page.
+ */
 class Budget {
   private pages = 0;
   readonly startedAt: number;
@@ -33,9 +36,9 @@ class Budget {
     this.startedAt = now().getTime();
   }
 
-  /** Counts one fetched page and reports whether the budget is now spent. */
-  spend(): boolean {
-    this.pages++;
+  /** Counts the requests one fetched page took and reports whether the budget is now spent. */
+  spend(requests: number): boolean {
+    this.pages += requests;
     return this.pages >= this.maxPages || this.now().getTime() - this.startedAt >= this.maxMs;
   }
 
@@ -190,7 +193,7 @@ export class SyncService {
       store.upsertPullRequests(repo.id, page.pullRequests, page.reviews);
       lastCursor = page.endCursor;
       if (page.oldestUpdatedAt !== null) oldest = Math.min(oldest, toMs(page.oldestUpdatedAt));
-      const spent = budget.spend();
+      const spent = budget.spend(page.requests);
       if (oldest < target || page.endCursor === null) break;
       // The next page may hold PRs updated in the same second as the oldest one reached, so that second is not claimed.
       if (spent) return { covered: oldest + SECOND_MS, stopped: true, lastCursor };
@@ -204,10 +207,11 @@ export class SyncService {
     const { github, store } = this.deps;
     const source = { owner: repo.owner, name: repo.name };
     let oldest = until;
-    for await (const commits of github.commitPages(source, repo.defaultBranch, toIso(since), toIso(until))) {
+    for await (const page of github.commitPages(source, repo.defaultBranch, toIso(since), toIso(until))) {
+      const { commits } = page;
       store.upsertCommits(repo.id, commits);
       for (const c of commits) oldest = Math.min(oldest, toMs(c.committedAt));
-      const spent = budget.spend();
+      const spent = budget.spend(page.requests);
       if (commits.length === 0) break;
       // Assumes history pages are newest-first by commit date; the oldest second reached may continue on the next page.
       if (spent) return { covered: Math.max(since, oldest + SECOND_MS), stopped: true };
