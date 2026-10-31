@@ -34,6 +34,9 @@ export type RawCommit = {
 };
 
 const GHOST = 'ghost';
+const MAX_NAME_LENGTH = 100;
+/** C0/C1 controls plus the bidi marks, embeddings, overrides and isolates that can disguise a name. */
+const UNSAFE_NAME_CHARS = /[\p{Cc}؜‎‏‪-‮⁦-⁩]/gu;
 const BOT_SUFFIX = '[bot]';
 const REVIEW_STATES: ReadonlySet<string> = new Set<ReviewState>([
   'APPROVED',
@@ -90,9 +93,16 @@ export function mapReviews(pullRequestId: string, reviews: RawReview[]): ReviewR
   return rows;
 }
 
+/** Git author names are free text from anyone who can push: strip unsafe characters, cap at 100 code points. */
+function sanitizeName(name: string): string {
+  return Array.from(name.replace(UNSAFE_NAME_CHARS, ''))
+    .slice(0, MAX_NAME_LENGTH)
+    .join('');
+}
+
 export function mapCommit(commit: RawCommit): CommitRow {
   const login = commit.author?.user?.login ?? null;
-  const name = commit.author?.name ?? '';
+  const name = sanitizeName(commit.author?.name ?? '');
   return {
     sha: commit.oid,
     authorLogin: login,

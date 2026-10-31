@@ -414,6 +414,22 @@ describe('commitPages', () => {
     expect(h.calls[0]?.body.query).not.toMatch(/additions|deletions/);
   });
 
+  it('strips control and bidi characters from git author names and caps them at 100 characters', async () => {
+    const h = harness([
+      commitPage(
+        [
+          rawCommit('a1', { author: { name: 'admin‮nimda\u0007⁦x⁩‏', user: null } }),
+          rawCommit('a2', { author: { name: 'n'.repeat(150), user: null } }),
+          rawCommit('a3', { author: { name: `${'é'.repeat(99)}\u{1F600}tail`, user: null } }),
+        ],
+        false,
+        null,
+      ),
+    ]);
+    const [page] = await collect(h.client.commitPages(repo, 'main', 'a', 'b'));
+    expect(page?.map((c) => c.authorName)).toEqual(['adminnimdax', 'n'.repeat(100), `${'é'.repeat(99)}\u{1F600}`]);
+  });
+
   it('yields nothing when the branch does not exist', async () => {
     const h = harness([json({ data: { repository: { ref: null }, rateLimit } })]);
     expect(await collect(h.client.commitPages(repo, 'gone', 'a', 'b'))).toEqual([]);
