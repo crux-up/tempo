@@ -335,8 +335,6 @@ describe('commitPages', () => {
   const rawCommit = (oid: string, over: Record<string, unknown> = {}) => ({
     oid,
     committedDate: '2026-03-10T08:00:00Z',
-    additions: 5,
-    deletions: 1,
     author: { name: 'Alice A', user: { login: 'alice' } },
     ...over,
   });
@@ -374,7 +372,13 @@ describe('commitPages', () => {
       ['a4', 'renovate[bot]', 'Renovate', true],
       ['a5', null, '', false],
     ]);
-    expect(pages[0]?.[0]).toMatchObject({ committedAt: '2026-03-10T08:00:00Z', additions: 5, deletions: 1 });
+    expect(pages[0]?.[0]).toEqual({
+      sha: 'a1',
+      authorLogin: 'alice',
+      authorName: 'Alice A',
+      authorIsBot: false,
+      committedAt: '2026-03-10T08:00:00Z',
+    });
     expect(h.calls[0]?.body.variables).toEqual({
       owner: 'acme',
       name: 'widgets',
@@ -384,6 +388,8 @@ describe('commitPages', () => {
       until: '2026-04-01T00:00:00.000Z',
     });
     expect(h.calls[1]?.body.variables.cursor).toBe('k1');
+    // Commit line counts make GitHub compute a diff per commit and no metric uses them.
+    expect(h.calls[0]?.body.query).not.toMatch(/additions|deletions/);
   });
 
   it('yields nothing when the branch does not exist', async () => {

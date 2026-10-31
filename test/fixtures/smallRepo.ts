@@ -108,8 +108,6 @@ const commit = (sha: string, authorLogin: string | null, authorName: string, com
   authorName,
   authorIsBot: authorName.endsWith('[bot]'),
   committedAt,
-  additions: 10,
-  deletions: 2,
 });
 
 export const pullRequests: PullRequestRow[] = [

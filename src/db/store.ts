@@ -55,8 +55,6 @@ type CommitDbRow = {
   author_name: string;
   author_is_bot: number;
   committed_at: string;
-  additions: number;
-  deletions: number;
 };
 
 type NarrativeDbRow = { body: string; model: string; prompt_version: string; created_at: string };
@@ -110,8 +108,6 @@ const toCommit = (r: CommitDbRow): CommitRow => ({
   authorName: r.author_name,
   authorIsBot: r.author_is_bot === 1,
   committedAt: r.committed_at,
-  additions: r.additions,
-  deletions: r.deletions,
 });
 
 export class Store {
@@ -167,13 +163,12 @@ export class Store {
 
     this.insertCommit = db.prepare(
       `INSERT INTO commits
-         (repo_id, sha, author_login, author_name, author_is_bot, committed_at, additions, deletions)
+         (repo_id, sha, author_login, author_name, author_is_bot, committed_at)
        VALUES
-         (@repoId, @sha, @authorLogin, @authorName, @authorIsBot, @committedAt, @additions, @deletions)
+         (@repoId, @sha, @authorLogin, @authorName, @authorIsBot, @committedAt)
        ON CONFLICT(repo_id, sha) DO UPDATE SET
          author_login = excluded.author_login, author_name = excluded.author_name,
-         author_is_bot = excluded.author_is_bot, committed_at = excluded.committed_at,
-         additions = excluded.additions, deletions = excluded.deletions`,
+         author_is_bot = excluded.author_is_bot, committed_at = excluded.committed_at`,
     );
 
     // :from/:to bound the window, :asOf caps review visibility. A PR qualifies when it was created or merged in
@@ -213,7 +208,7 @@ export class Store {
     );
 
     this.selectWindowCommits = db.prepare<{ repoId: number; from: string; to: string }, CommitDbRow>(
-      `SELECT sha, author_login, author_name, author_is_bot, committed_at, additions, deletions
+      `SELECT sha, author_login, author_name, author_is_bot, committed_at
          FROM commits
         WHERE repo_id = @repoId AND committed_at >= @from AND committed_at < @to
         ORDER BY committed_at, sha`,

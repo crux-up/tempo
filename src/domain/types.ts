@@ -34,8 +34,6 @@ export type CommitRow = {
   authorName: string;
   authorIsBot: boolean;
   committedAt: string;
-  additions: number;
-  deletions: number;
 };
 
 export type DurationStat = { medianHours: number | null; p90Hours: number | null; sampleSize: number };

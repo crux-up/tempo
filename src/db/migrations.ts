@@ -66,6 +66,11 @@ export const MIGRATIONS: readonly string[] = [
   `
   ALTER TABLE repos ADD COLUMN backfill_cursor TEXT;
   `,
+  // Commit line counts were never used, and they are among the most expensive fields of the history query.
+  `
+  ALTER TABLE commits DROP COLUMN additions;
+  ALTER TABLE commits DROP COLUMN deletions;
+  `,
 ];
 
 export function migrate(db: Database): void {

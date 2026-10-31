@@ -30,8 +30,6 @@ export type RawPullRequest = {
 export type RawCommit = {
   oid: string;
   committedDate: string;
-  additions: number;
-  deletions: number;
   author: { name: string | null; user: { login: string } | null } | null;
 };
 
@@ -93,8 +91,6 @@ export function mapCommit(commit: RawCommit): CommitRow {
     authorName: name,
     authorIsBot: (login?.endsWith(BOT_SUFFIX) ?? false) || name.endsWith(BOT_SUFFIX),
     committedAt: commit.committedDate,
-    additions: commit.additions,
-    deletions: commit.deletions,
   };
 }
 

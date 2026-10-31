@@ -74,8 +74,6 @@ query Commits($owner: String!, $name: String!, $branch: String!, $cursor: String
             nodes {
               oid
               committedDate
-              additions
-              deletions
               author { name user { login } }
             }
           }

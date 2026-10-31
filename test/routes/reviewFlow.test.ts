@@ -224,8 +224,6 @@ describe('GET /api/v1/repos/:owner/:repo/review-flow', () => {
         authorName: 'Erin',
         authorIsBot: false,
         committedAt: '2026-03-19T23:57:00Z',
-        additions: 1,
-        deletions: 1,
       },
     ]);
 

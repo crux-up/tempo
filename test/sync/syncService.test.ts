@@ -27,8 +27,6 @@ const commit = (sha: string, committedAt: string): CommitRow => ({
   authorName: 'Alice',
   authorIsBot: false,
   committedAt,
-  additions: 1,
-  deletions: 1,
 });
 
 type PrPage = { pullRequests: PullRequestRow[]; reviews: ReviewRow[]; oldestUpdatedAt: string | null };

@@ -40,8 +40,6 @@ const commit = (sha: string, committedAt: string, over: Partial<CommitRow> = {})
   authorName: 'Alice',
   authorIsBot: false,
   committedAt,
-  additions: 5,
-  deletions: 1,
   ...over,
 });
 
@@ -178,10 +176,10 @@ describe('Store', () => {
       commit('b2', '2026-02-28T23:59:59.000Z'),
       commit('c3', '2026-04-01T00:00:00.000Z'),
     ]);
-    store.upsertCommits(repoId, [commit('a1', '2026-03-05T00:00:00.000Z', { additions: 50 })]);
+    store.upsertCommits(repoId, [commit('a1', '2026-03-05T00:00:00.000Z', { authorName: 'Alice A' })]);
     const commits = store.loadWindowData(repoId, window, asOf).commits;
     expect(commits.map((c) => c.sha)).toEqual(['a1']);
-    expect(commits[0]?.additions).toBe(50);
+    expect(commits[0]?.authorName).toBe('Alice A');
   });
 
   it('rolls back the whole batch when a review references an unknown pull request', () => {
@@ -237,12 +235,35 @@ describe('openDatabase', () => {
     v1.close();
 
     const db = openDatabase(path);
-    expect(db.pragma('user_version', { simple: true })).toBe(2);
+    expect(db.pragma('user_version', { simple: true })).toBe(MIGRATIONS.length);
     expect(new Store(db).getRepo('acme/api')).toMatchObject({
       syncedFrom: '2026-01-01T00:00:00.000Z',
       syncedAt: '2026-04-01T00:00:00.000Z',
       backfillCursor: null,
     });
+    db.close();
+  });
+
+  it('applies migration 3 to a version 2 database: drops commit line counts and keeps the commits', () => {
+    const path = join(dir, 'v2.db');
+    const v2 = new BetterSqlite3(path);
+    v2.exec(MIGRATIONS[0] as string);
+    v2.exec(MIGRATIONS[1] as string);
+    v2.pragma('user_version = 2');
+    v2.prepare("INSERT INTO repos (key, owner, name, default_branch) VALUES ('acme/api', 'acme', 'api', 'main')").run();
+    v2.prepare(
+      `INSERT INTO commits (repo_id, sha, author_login, author_name, author_is_bot, committed_at, additions, deletions)
+       VALUES (1, 'a1', 'alice', 'Alice', 0, '2026-03-05T00:00:00.000Z', 5, 1)`,
+    ).run();
+    v2.close();
+
+    const db = openDatabase(path);
+    const columns = (db.pragma('table_info(commits)') as { name: string }[]).map((c) => c.name);
+    expect(columns).not.toContain('additions');
+    expect(columns).not.toContain('deletions');
+    expect(new Store(db).loadWindowData(1, window, asOf).commits).toEqual([
+      commit('a1', '2026-03-05T00:00:00.000Z'),
+    ]);
     db.close();
   });
 
