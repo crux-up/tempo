@@ -20,6 +20,9 @@ type SyncDeps = {
 type PassResult = { covered: number; stopped: boolean };
 
 const SECOND_MS = 1000;
+const DAY_MS = 86_400_000;
+/** A refresh re-reads this much commit history below the old syncedAt: merge commits bring branch commits with older committer dates. */
+const COMMIT_REFRESH_OVERLAP_MS = 14 * DAY_MS;
 /** Below this many GitHub points left, syncs stop early and keep the rest of the token's hourly quota in reserve. */
 const QUOTA_FLOOR = 100;
 
@@ -159,7 +162,10 @@ export class SyncService {
     const passes: PassResult[] = [topPr];
     let topCovered = topPr.covered;
     if (topNeeded) {
-      const commits = await this.commitPass(repo, Math.max(topTarget, topPr.covered), startedAt, budget);
+      // Upserts make the overlap harmless. A PR pass cut short above the old syncedAt still sets the start.
+      const overlapFrom = oldAt === null ? topTarget : Math.max(oldFrom as number, oldAt - COMMIT_REFRESH_OVERLAP_MS);
+      const since = topPr.covered > topTarget ? topPr.covered : overlapFrom;
+      const commits = await this.commitPass(repo, since, startedAt, budget);
       passes.push(commits);
       topCovered = commits.covered;
     }

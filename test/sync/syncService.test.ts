@@ -185,7 +185,7 @@ describe('SyncService', () => {
     expect(second).toEqual(first);
   });
 
-  it('after the TTL refreshes only back to syncedAt', async () => {
+  it('after the TTL refreshes PRs back to syncedAt and commits from 14 days before it', async () => {
     await service().ensureSynced(REPO, MARCH);
     clock = new Date(T0.getTime() + 20 * 60_000);
     github.prPages = [
@@ -199,13 +199,44 @@ describe('SyncService', () => {
     expect(github.prPagesPulled).toBe(1);
     expect(github.commitCalls[1]).toEqual({
       branch: 'main',
-      since: '2026-03-31T12:00:00.000Z',
+      since: '2026-03-17T12:00:00.000Z',
       until: '2026-03-31T12:20:00.000Z',
     });
     expect(result.repo.syncedAt).toBe('2026-03-31T12:20:00.000Z');
     expect(result.repo.syncedFrom).toBe('2026-03-01T00:00:00.000Z');
     expect(result.dataAsOf).toBe('2026-03-31T12:20:00.000Z');
     expect(result.coverage.partial).toBe(false);
+  });
+
+  it('picks up a commit dated before syncedAt but pushed after it, such as one brought in by a merge commit', async () => {
+    await service().ensureSynced(REPO, MARCH);
+    clock = new Date(T0.getTime() + 20 * 60_000);
+    github.commitPagesData = [
+      [commit('merge', '2026-03-31T12:05:00.000Z'), commit('branch', '2026-03-28T09:00:00.000Z')],
+      [commit('c1', '2026-03-15T00:00:00.000Z')],
+    ];
+
+    const result = await service().ensureSynced(REPO, MARCH);
+
+    expect(github.commitCalls[1]).toEqual({
+      branch: 'main',
+      since: '2026-03-17T12:00:00.000Z',
+      until: '2026-03-31T12:20:00.000Z',
+    });
+    const stored = store.loadWindowData(result.repo.id, MARCH, clock);
+    expect(stored.commits.map((c) => c.sha).sort()).toEqual(['branch', 'c1']);
+    expect(result.repo.syncedAt).toBe('2026-03-31T12:20:00.000Z');
+    expect(result.coverage.partial).toBe(false);
+  });
+
+  it('starts the refresh commit overlap no earlier than syncedFrom', async () => {
+    const lastWeek = { from: new Date('2026-03-25T00:00:00.000Z'), to: T0 };
+    await service().ensureSynced(REPO, lastWeek);
+    clock = new Date(T0.getTime() + 20 * 60_000);
+
+    await service().ensureSynced(REPO, lastWeek);
+
+    expect(github.commitCalls[1]).toMatchObject({ since: '2026-03-25T00:00:00.000Z' });
   });
 
   it('re-checks that the repository is public on every run that syncs, and stops serving it once private', async () => {
@@ -382,7 +413,7 @@ describe('SyncService', () => {
     });
     expect(result.coverage).toMatchObject({ partial: true, from: '2026-03-01T00:00:00.000Z' });
     expect(github.commitCalls.slice(1)).toEqual([
-      { branch: 'main', since: '2026-03-31T12:00:00.000Z', until: '2026-03-31T12:20:00.000Z' },
+      { branch: 'main', since: '2026-03-17T12:00:00.000Z', until: '2026-03-31T12:20:00.000Z' },
     ]);
 
     const next = await service({ maxPages: 2 }).ensureSynced(REPO, wider);

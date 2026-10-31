@@ -363,7 +363,7 @@ Add `--narrative` to also make and store the narrative. This option needs `ANTHR
 
 ## Known limitations
 
-- **Committer date.** Tempo counts commits by committer date, because the GitHub history filter uses that date. A rebase can move a commit into a later window.
+- **Committer date.** Tempo counts commits by committer date, because the GitHub history filter uses that date. A rebase can move a commit into a later window. A merge commit can add branch commits with older dates. Each refresh reads the commits again from 14 days before the last sync. Tempo does not count a branch commit that is older than that.
 - **Synchronous sync.** A request waits for its sync. A large repository can need several requests before `coverage.partial` becomes `false`. Each request continues the backfill from a stored page position.
 - **Stuck refresh.** A refresh can stay incomplete when more PRs change in one TTL period than `SYNC_MAX_PAGES` pages can hold.
 - **Narrative excludes today.** An open narrative window ends at the last UTC midnight. The dashboard default range ends yesterday for the same reason.
