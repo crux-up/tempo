@@ -114,7 +114,9 @@ const EvidenceSchema = z.object({
   factId: z.string(),
   label: z.string(),
   value: z.union([z.number(), z.string()]).nullable().describe('The fact value from the metrics, not from the model'),
-  unit: z.enum(['count', 'hours', 'share', 'login', 'week']).describe('A share is a fraction from 0 to 1'),
+  unit: z
+    .enum(['count', 'hours', 'share', 'login', 'week', 'datetime'])
+    .describe('A share is a fraction from 0 to 1; a datetime is an ISO-8601 UTC instant'),
 });
 
 export const NarrativeResponseSchema = z

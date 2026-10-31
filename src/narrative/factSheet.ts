@@ -5,7 +5,8 @@ export type Fact = {
   id: string;
   label: string;
   value: number | string | null;
-  unit: 'count' | 'hours' | 'share' | 'login' | 'week';
+  /** `datetime` values are ISO-8601 UTC instants. Yes/no context facts use `count` with the value 0 or 1. */
+  unit: 'count' | 'hours' | 'share' | 'login' | 'week' | 'datetime';
   sampleSize?: number;
 };
 export type Signal = { id: string; description: string; factIds: string[] };
@@ -147,6 +148,33 @@ function teamFacts(team: TeamStats, people: PersonStats[]): Fact[] {
   ];
 }
 
+/** How the report was built: bot setting and sync coverage, so the model need not assume either. */
+function metaFacts(report: ReviewFlowReport): Fact[] {
+  const facts: Fact[] = [
+    {
+      id: 'meta.includeBots',
+      label: 'Bot accounts are counted as people (1 = yes, 0 = no)',
+      value: report.includeBots ? 1 : 0,
+      unit: 'count',
+    },
+    {
+      id: 'meta.coveragePartial',
+      label: 'Synced data covers only part of the window (1 = yes, 0 = no)',
+      value: report.coverage.partial ? 1 : 0,
+      unit: 'count',
+    },
+  ];
+  if (report.coverage.partial) {
+    facts.push({
+      id: 'meta.coverageFrom',
+      label: 'Start of the synced data; the window before this instant is missing',
+      value: report.coverage.from,
+      unit: 'datetime',
+    });
+  }
+  return facts;
+}
+
 const topBy = (people: PersonStats[], field: PersonField) =>
   [...people]
     .sort((a, b) => b[field] - a[field] || (a.login < b.login ? -1 : a.login > b.login ? 1 : 0))
@@ -266,14 +294,19 @@ function buildSignals(report: ReviewFlowReport, people: PersonStats[]): Signal[]
 
 /**
  * Flattens a report into numbered-by-id facts plus deterministic signals. Only numbers, fixed labels, ISO week
- * names and GitHub-shaped logins appear; unlinked commit authors are counted, never named.
+ * names, ISO instants and GitHub-shaped logins appear; unlinked commit authors are counted, never named.
  */
 export function buildFactSheet(report: ReviewFlowReport): FactSheet {
   const people = selectPeople(report.people);
   return {
     repo: report.repo,
     window: report.window,
-    facts: [...teamFacts(report.team, report.people), ...people.flatMap(personFacts), ...report.weekly.flatMap(weekFacts)],
+    facts: [
+      ...metaFacts(report),
+      ...teamFacts(report.team, report.people),
+      ...people.flatMap(personFacts),
+      ...report.weekly.flatMap(weekFacts),
+    ],
     signals: buildSignals(report, people),
   };
 }

@@ -210,3 +210,24 @@ describe('buildFactSheet signals', () => {
     expect(signalIds(tied)).not.toContain('signal.topReviewerIsTopMerger');
   });
 });
+
+describe('buildFactSheet context facts', () => {
+  it('records whether bot accounts are included as a 0/1 count', () => {
+    expect(fact(buildFactSheet(smallReport()), 'meta.includeBots')).toMatchObject({ value: 0, unit: 'count' });
+    expect(fact(buildFactSheet({ ...smallReport(), includeBots: true }), 'meta.includeBots').value).toBe(1);
+  });
+
+  it('marks full coverage with meta.coveragePartial 0 and no coverage start', () => {
+    const sheet = buildFactSheet(smallReport());
+    expect(fact(sheet, 'meta.coveragePartial')).toMatchObject({ value: 0, unit: 'count' });
+    expect(sheet.facts.some((f) => f.id === 'meta.coverageFrom')).toBe(false);
+  });
+
+  it('marks partial coverage and gives the instant from which data is synced', () => {
+    const report = smallReport();
+    const coverage = { partial: true, from: '2026-03-09T00:00:00.000Z', to: report.coverage.to };
+    const sheet = buildFactSheet({ ...report, coverage });
+    expect(fact(sheet, 'meta.coveragePartial').value).toBe(1);
+    expect(fact(sheet, 'meta.coverageFrom')).toMatchObject({ value: '2026-03-09T00:00:00.000Z', unit: 'datetime' });
+  });
+});

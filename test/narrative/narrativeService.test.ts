@@ -8,7 +8,7 @@ import { NarrativeService } from '../../src/narrative/narrativeService.js';
 import { PROMPT_VERSION } from '../../src/narrative/prompt.js';
 import { ReviewFlowService } from '../../src/services/reviewFlowService.js';
 import { AS_OF, commits, pullRequests, reviews } from '../fixtures/smallRepo.js';
-import { FakeSync } from '../routes/harness.js';
+import { DATA_AS_OF, FakeSync } from '../routes/harness.js';
 import { FakeNarrativeModel } from './fakes.js';
 
 const REPO = { owner: 'fastify', name: 'fastify' };
@@ -23,6 +23,7 @@ let sync: FakeSync;
 let model: FakeNarrativeModel;
 let logs: LogLine[];
 let service: NarrativeService;
+let now: Date;
 
 const logger: Logger = {
   debug: (obj, msg) => logs.push({ level: 'debug', obj: obj as Record<string, unknown>, msg }),
@@ -35,7 +36,7 @@ const build = (modelName = 'claude-opus-5-5') =>
     model,
     modelName,
     store,
-    reviewFlow: new ReviewFlowService({ store, sync, now: () => AS_OF }),
+    reviewFlow: new ReviewFlowService({ store, sync, now: () => now }),
     logger,
   });
 
@@ -48,6 +49,7 @@ beforeEach(() => {
   sync = new FakeSync(store);
   model = new FakeNarrativeModel();
   logs = [];
+  now = AS_OF;
   service = build();
 });
 
@@ -145,6 +147,39 @@ describe('NarrativeService', () => {
 
     expect(res.cached).toBe(false);
     expect(model.calls).toBe(2);
+  });
+
+  it('snaps an open-ended window to the data snapshot so repeated requests hit the cache', async () => {
+    const first = await service.getNarrative(REPO, {});
+    now = new Date(AS_OF.getTime() + 60_000);
+    const second = await service.getNarrative(REPO, {});
+
+    expect(first.window).toEqual({ from: '2026-02-17T23:50:00.000Z', to: DATA_AS_OF });
+    expect(second).toMatchObject({ cached: true, window: first.window });
+    expect(model.calls).toBe(1);
+  });
+
+  it('keeps an explicit from when snapping an open-ended to', async () => {
+    const res = await service.getNarrative(REPO, { from: '2026-03-02' });
+
+    expect(res.window).toEqual({ from: '2026-03-02T00:00:00.000Z', to: DATA_AS_OF });
+  });
+
+  it('snaps a to later than the data snapshot', async () => {
+    const res = await service.getNarrative(REPO, { from: '2026-03-02', to: '2026-03-20' });
+
+    expect(res.window.to).toBe(DATA_AS_OF);
+  });
+
+  it('treats a cached body that fails the response schema as a miss and logs it', async () => {
+    await service.getNarrative(REPO, ACTIVE);
+    db.prepare("UPDATE narratives SET body = '{\"summary\": 1}'").run();
+
+    const res = await service.getNarrative(REPO, ACTIVE);
+
+    expect(res.cached).toBe(false);
+    expect(model.calls).toBe(2);
+    expect(logs.some((l) => l.level === 'warn' && l.msg === 'Cached narrative failed validation')).toBe(true);
   });
 
   it('answers a window without PR activity with a fixed narrative and no model call', async () => {

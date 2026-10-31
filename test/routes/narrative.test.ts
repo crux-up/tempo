@@ -65,6 +65,17 @@ describe('GET /api/v1/repos/:owner/:repo/review-flow/narrative', () => {
     expect(model.calls).toBe(1);
   });
 
+  it('serves a repeated open-ended request (no to) from the cache', async () => {
+    await start();
+    const first = await get(PATH);
+    h.clock.now = new Date(h.clock.now.getTime() + 60_000);
+    const second = await get(PATH);
+
+    expect(first.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({ cached: true });
+    expect(model.calls).toBe(1);
+  });
+
   it('calls the model again when refresh=true', async () => {
     await start();
     await get(`${PATH}?${WINDOW_QS}`);
@@ -135,7 +146,10 @@ describe('GET /api/v1/repos/:owner/:repo/review-flow/narrative', () => {
   it('is documented in the OpenAPI document with a response schema', async () => {
     await start();
     const doc = (await get('/api/v1/openapi.json')).json<{
-      paths: Record<string, { get?: { responses: Record<string, { content?: Record<string, { schema: unknown }> }> } }>;
+      paths: Record<
+        string,
+        { get?: { description?: string; responses: Record<string, { content?: Record<string, { schema: unknown }> }> } }
+      >;
     }>();
 
     const op = doc.paths['/api/v1/repos/{owner}/{repo}/review-flow/narrative']?.get;
@@ -143,5 +157,6 @@ describe('GET /api/v1/repos/:owner/:repo/review-flow/narrative', () => {
       $ref: '#/components/schemas/Narrative',
     });
     expect(Object.keys(op?.responses ?? {})).toEqual(expect.arrayContaining(['400', '429', '502', '503']));
+    expect(JSON.stringify(op)).toContain('150 seconds');
   });
 });

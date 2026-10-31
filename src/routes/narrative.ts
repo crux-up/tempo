@@ -19,7 +19,9 @@ export const narrativeRoutes: FastifyPluginAsyncZod<{ narrative: NarrativeServic
           'model, and returns a summary, findings and a root-cause hypothesis. Every evidence entry is checked ' +
           'against the metrics and carries the metric value, not the model text; unknown citations are dropped and ' +
           'confidence is capped for small samples. Results are cached per window, fact sheet, prompt version and ' +
-          `model. Limited to ${NARRATIVE_RATE_LIMIT_PER_MINUTE} requests per minute per client.`,
+          'model. An open-ended window (no `to`, or `to` after the last sync) ends at the sync time `dataAsOf`. An ' +
+          'uncached request waits for the model and can take up to about 150 seconds before it succeeds or fails ' +
+          `with 502. Limited to ${NARRATIVE_RATE_LIMIT_PER_MINUTE} requests per minute per client.`,
         tags: ['metrics'],
         params: RepoParams,
         querystring: NarrativeQuery,

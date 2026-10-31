@@ -21,6 +21,9 @@ export type Narrative = {
   };
 };
 
+/** Part of the narrative cache key: change it whenever verifyNarrative or confidenceCap changes its output. */
+export const VERIFIER_VERSION = '1';
+
 const CAPS: [{ below: number; max: number }, ...{ below: number; max: number }[]] = [
   { below: 10, max: 0.3 },
   { below: 20, max: 0.5 },

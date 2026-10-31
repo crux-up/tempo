@@ -1,4 +1,10 @@
-import Anthropic, { APIError, AuthenticationError, RateLimitError } from '@anthropic-ai/sdk';
+import Anthropic, {
+  APIError,
+  AuthenticationError,
+  PermissionDeniedError,
+  RateLimitError,
+  type ClientOptions,
+} from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { AppError, LlmError, NotConfiguredError, UpstreamRateLimitedError } from '../errors.js';
 import type { Logger } from '../logger.js';
@@ -18,19 +24,36 @@ export interface NarrativeModel {
 }
 
 /** The one SDK call the model needs; tests replace it so no request leaves the process. */
-export type CreateMessage = (params: MessageParams) => Promise<Message>;
+export type CreateMessage = (params: MessageParams, options: { signal: AbortSignal }) => Promise<Message>;
 
+/**
+ * Time limits for one `draft()` call. `attemptTimeoutMs` bounds each attempt (SDK retries included);
+ * `deadlineMs` bounds the whole call; the retry for invalid output runs only when at least `minRetryBudgetMs` of
+ * the deadline remains.
+ */
+export type ModelLimits = { attemptTimeoutMs: number; deadlineMs: number; minRetryBudgetMs: number };
+
+const DEFAULT_LIMITS: ModelLimits = { attemptTimeoutMs: 120_000, deadlineMs: 150_000, minRetryBudgetMs: 60_000 };
 const MAX_TOKENS = 16_000;
-const TIMEOUT_MS = 60_000;
-const SDK_MAX_RETRIES = 2;
-/** Attempts per draft: the first, plus one repair retry when the output does not match the schema. */
+const SDK_MAX_RETRIES = 1;
+/** Attempts per draft: the first, plus one retry when the output is not valid JSON for the schema. */
 const MAX_ATTEMPTS = 2;
 const DEFAULT_RETRY_AFTER_SECONDS = 60;
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 const OUTPUT_FORMAT = betaZodOutputFormat(NarrativeDraftSchema);
 
 const REFUSED = 'The model declined to analyse this data';
+const TRUNCATED = 'The model ran out of output tokens before finishing the narrative';
 const INVALID_OUTPUT = 'The model returned output that does not match the narrative schema';
+const TIMED_OUT = 'The model did not answer in time';
+
+/**
+ * Time limits are enforced by the abort signal passed with each call, so a timed-out attempt is never retried by
+ * the SDK. The SDK's own timeout is only a backstop at the request deadline.
+ */
+export function anthropicClientOptions(apiKey: string): ClientOptions {
+  return { apiKey, maxRetries: SDK_MAX_RETRIES, timeout: DEFAULT_LIMITS.deadlineMs };
+}
 
 function buildRequest(model: string, sheet: FactSheet): MessageParams {
   return {
@@ -45,10 +68,22 @@ function buildRequest(model: string, sheet: FactSheet): MessageParams {
   };
 }
 
-/** The draft in the response's text, or null when it is missing, truncated or does not match the schema. */
+/**
+ * The text the serving model wrote: text blocks after the last `fallback` block (output before it belongs to a
+ * model that declined), joined.
+ */
+function finalText(message: Message): string | null {
+  const lastFallback = message.content.findLastIndex((block) => block.type === 'fallback');
+  const texts = message.content
+    .slice(lastFallback + 1)
+    .flatMap((block) => (block.type === 'text' ? [block.text] : []));
+  return texts.length === 0 ? null : texts.join('');
+}
+
+/** The draft in the response's text, or null when it is missing, not JSON or does not match the schema. */
 function parseDraft(message: Message): NarrativeDraft | null {
-  const text = message.content.find((block) => block.type === 'text')?.text;
-  if (text === undefined) return null;
+  const text = finalText(message);
+  if (text === null) return null;
   let json: unknown;
   try {
     json = JSON.parse(text);
@@ -59,15 +94,46 @@ function parseDraft(message: Message): NarrativeDraft | null {
   return parsed.success ? parsed.data : null;
 }
 
+/** Token counts for the message: the sum over `usage.iterations` when present (fallback hops), else the totals. */
+function messageUsage(message: Message): TokenUsage {
+  const { usage } = message;
+  const iterations = usage.iterations ?? [];
+  if (iterations.length === 0) {
+    return {
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+    };
+  }
+  return iterations.reduce<TokenUsage>(
+    (sum, it) => ({
+      inputTokens: sum.inputTokens + it.input_tokens,
+      outputTokens: sum.outputTokens + it.output_tokens,
+      cacheReadTokens: sum.cacheReadTokens + (it.cache_read_input_tokens ?? 0),
+    }),
+    { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 },
+  );
+}
+
+const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
+  inputTokens: a.inputTokens + b.inputTokens,
+  outputTokens: a.outputTokens + b.outputTokens,
+  cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+});
+
 function retryAfterSeconds(error: RateLimitError): number {
   const seconds = Number(error.headers.get('retry-after'));
   return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : DEFAULT_RETRY_AFTER_SECONDS;
 }
 
 /** Maps SDK failures to problem errors. Upstream messages are not passed on: they are not written for our clients. */
-function toAppError(error: unknown): AppError {
+function toAppError(error: unknown, timedOut: boolean): AppError {
+  if (timedOut) return new LlmError(TIMED_OUT);
   if (error instanceof AppError) return error;
   if (error instanceof AuthenticationError) return new NotConfiguredError('ANTHROPIC_API_KEY was rejected');
+  if (error instanceof PermissionDeniedError) {
+    return new NotConfiguredError('ANTHROPIC_API_KEY lacks access to the configured model');
+  }
   if (error instanceof RateLimitError) return new UpstreamRateLimitedError(retryAfterSeconds(error), 'Anthropic');
   if (error instanceof APIError) {
     const status = error.status === undefined ? 'no response' : `status ${error.status}`;
@@ -76,66 +142,89 @@ function toAppError(error: unknown): AppError {
   return new LlmError('The language model request failed');
 }
 
-function sdkCreateMessage(apiKey: string): CreateMessage {
-  const client = new Anthropic({ apiKey, timeout: TIMEOUT_MS, maxRetries: SDK_MAX_RETRIES });
-  return (params) => client.beta.messages.create(params);
+/** What an operator needs to trace a failure, without upstream message text. */
+function failureDetails(error: unknown): Record<string, unknown> {
+  // SDK error classes leave `name` as "Error"; the constructor name says which one it was.
+  const cause = error instanceof Error ? (error.name === 'Error' ? error.constructor.name : error.name) : typeof error;
+  if (!(error instanceof APIError)) return { cause };
+  return { cause, status: error.status ?? null, requestId: error.requestID ?? null };
 }
 
-const addUsage = (total: TokenUsage, message: Message): TokenUsage => ({
-  inputTokens: total.inputTokens + message.usage.input_tokens,
-  outputTokens: total.outputTokens + message.usage.output_tokens,
-  cacheReadTokens: total.cacheReadTokens + (message.usage.cache_read_input_tokens ?? 0),
-});
+function sdkCreateMessage(apiKey: string): CreateMessage {
+  const client = new Anthropic(anthropicClientOptions(apiKey));
+  return (params, options) => client.beta.messages.create(params, options);
+}
 
 /**
- * Drafts a narrative with structured output. A refusal fails at once; output that does not parse against the
- * schema (including output cut off at max_tokens) is requested once more with the same request, then fails. The SDK
- * itself retries rate limits, overloads and connection errors.
+ * Drafts a narrative with structured output, within `limits` (defaults: 120 s per attempt, 150 s overall).
+ * A refusal, output cut off at max_tokens, or a timeout fails at once. Output that is not valid JSON for the schema
+ * is requested once more with the same request when enough of the deadline remains, then fails. The SDK retries a
+ * rate limit, overload or connection failure once.
  */
 export function createAnthropicNarrativeModel(opts: {
   apiKey: string;
   model: string;
   logger: Logger;
   createMessage?: CreateMessage;
+  limits?: Partial<ModelLimits>;
+  now?: () => number;
 }): NarrativeModel {
   const { logger } = opts;
   const send = opts.createMessage ?? sdkCreateMessage(opts.apiKey);
+  const limits: ModelLimits = { ...DEFAULT_LIMITS, ...opts.limits };
+  const now = opts.now ?? (() => performance.now());
 
   return {
     async draft(sheet) {
       const request = buildRequest(opts.model, sheet);
+      const deadline = AbortSignal.timeout(limits.deadlineMs);
+      const callStartedAt = now();
       let usage: TokenUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
+
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        const startedAt = performance.now();
+        if (attempt > 1 && limits.deadlineMs - (now() - callStartedAt) < limits.minRetryBudgetMs) {
+          logger.warn({ model: opts.model, attempt }, 'Skipping language model retry: deadline too close');
+          break;
+        }
+        const signal = AbortSignal.any([deadline, AbortSignal.timeout(limits.attemptTimeoutMs)]);
+        const startedAt = now();
         let message: Message;
         try {
-          message = await send(request);
+          message = await send(request, { signal });
         } catch (error) {
-          const mapped = toAppError(error);
+          const mapped = toAppError(error, signal.aborted);
           logger.warn(
-            { model: opts.model, attempt, latencyMs: Math.round(performance.now() - startedAt), error: mapped.name },
+            {
+              model: opts.model,
+              attempt,
+              latencyMs: Math.round(now() - startedAt),
+              error: mapped.name,
+              ...failureDetails(error),
+            },
             'Language model call failed',
           );
           throw mapped;
         }
-        usage = addUsage(usage, message);
-        const draft = message.stop_reason === 'refusal' ? null : parseDraft(message);
+
+        const attemptUsage = messageUsage(message);
+        usage = addUsage(usage, attemptUsage);
+        const draft = message.stop_reason === 'end_turn' ? parseDraft(message) : null;
         logger.info(
           {
             requestedModel: opts.model,
             model: message.model,
             attempt,
             stopReason: message.stop_reason,
-            latencyMs: Math.round(performance.now() - startedAt),
-            inputTokens: message.usage.input_tokens,
-            outputTokens: message.usage.output_tokens,
-            cacheReadTokens: message.usage.cache_read_input_tokens ?? 0,
+            refusalCategory: message.stop_details?.category ?? null,
+            latencyMs: Math.round(now() - startedAt),
+            ...attemptUsage,
             cacheWriteTokens: message.usage.cache_creation_input_tokens ?? 0,
             validOutput: draft !== null,
           },
           'Language model call finished',
         );
         if (message.stop_reason === 'refusal') throw new LlmError(REFUSED);
+        if (message.stop_reason === 'max_tokens') throw new LlmError(TRUNCATED);
         if (draft) return { draft, model: message.model, usage };
       }
       throw new LlmError(INVALID_OUTPUT);

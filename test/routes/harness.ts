@@ -57,6 +57,8 @@ export type Harness = {
   store: Store;
   sync: FakeSync;
   reviewFlow: ReviewFlowService;
+  /** The service clock; tests may move `clock.now` forward. */
+  clock: { now: Date };
   logs: string[];
   close: () => Promise<void>;
 };
@@ -73,7 +75,8 @@ export async function createHarness(opts: { webRoot?: string; narrativeModel?: N
   store.upsertCommits(repo.id, commits);
 
   const sync = new FakeSync(store);
-  const reviewFlow = new ReviewFlowService({ store, sync, now: () => AS_OF });
+  const clock = { now: AS_OF };
+  const reviewFlow = new ReviewFlowService({ store, sync, now: () => clock.now });
   const logs: string[] = [];
   const stream = new Writable({
     write(chunk: Buffer, _encoding, callback) {
@@ -99,6 +102,7 @@ export async function createHarness(opts: { webRoot?: string; narrativeModel?: N
     store,
     sync,
     reviewFlow,
+    clock,
     logs,
     close: async () => {
       await app.close();
