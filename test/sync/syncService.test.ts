@@ -93,7 +93,7 @@ class FakeGitHub implements GitHubSource {
   }
 }
 
-const silent: Logger = { debug: () => {}, warn: () => {} };
+const silent: Logger = { debug: () => {}, info: () => {}, warn: () => {} };
 const T0 = new Date('2026-03-31T12:00:00.000Z');
 const MARCH = { from: new Date('2026-03-01T00:00:00.000Z'), to: T0 };
 const FROM_FEB_15 = { from: new Date('2026-02-15T00:00:00.000Z'), to: T0 };

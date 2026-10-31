@@ -19,7 +19,9 @@ import type { Config } from './config.js';
 import type { Store } from './db/store.js';
 import { TooManyRequestsError } from './errors.js';
 import { registerProblemHandlers, requestPath, sendFrameworkError, sendNotFound } from './http/problem.js';
+import type { NarrativeService } from './narrative/narrativeService.js';
 import { healthRoutes } from './routes/health.js';
+import { narrativeRoutes } from './routes/narrative.js';
 import { reviewFlowRoutes } from './routes/reviewFlow.js';
 import type { ReviewFlowService } from './services/reviewFlowService.js';
 
@@ -27,8 +29,8 @@ export type AppDeps = {
   config: Config;
   store: Store;
   reviewFlow: ReviewFlowService;
-  /** No narrative service exists yet, so no narrative route is registered. */
-  narrative: null;
+  /** Null when no Anthropic key is configured: the narrative route then answers 503 not-configured. */
+  narrative: NarrativeService | null;
   /** `false` disables logging. Defaults to `createLogger(config)`; pass the services' instance to share one logger. */
   logger?: false | Logger;
   /** Built single-page app; served at `/` only when the directory exists. Defaults to `web/dist`. */
@@ -141,7 +143,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       info: {
         title: 'Tempo API',
         version: '1.0.0',
-        description: 'Review-flow metrics for public GitHub repositories. Errors are RFC 9457 problem documents.',
+        description:
+          'Review-flow metrics for public GitHub repositories, with a verified language-model narrative over them. ' +
+          'Errors are RFC 9457 problem documents.',
       },
       tags: [
         { name: 'metrics', description: 'Repository metrics' },
@@ -154,6 +158,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   await app.register(healthRoutes, { store: deps.store });
   await app.register(reviewFlowRoutes, { reviewFlow: deps.reviewFlow });
+  await app.register(narrativeRoutes, { narrative: deps.narrative });
   app.get('/api/v1/openapi.json', { schema: { hide: true } }, async () => app.swagger());
 
   const webRoot = deps.webRoot ?? DEFAULT_WEB_ROOT;

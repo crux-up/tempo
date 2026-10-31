@@ -43,8 +43,8 @@ export class UpstreamRateLimitedError extends AppError {
   readonly status = 503;
   readonly type = `${PROBLEM_BASE}upstream-rate-limited`;
   readonly title = 'Upstream rate limit reached';
-  constructor(retryAfterSeconds: number) {
-    super(`The GitHub rate limit was reached; retry in ${retryAfterSeconds} seconds`);
+  constructor(retryAfterSeconds: number, upstream: 'GitHub' | 'Anthropic' = 'GitHub') {
+    super(`The ${upstream} rate limit was reached; retry in ${retryAfterSeconds} seconds`);
     this.retryAfterSeconds = retryAfterSeconds;
   }
 }

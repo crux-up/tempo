@@ -6,6 +6,8 @@ import type { Config } from '../../src/config.js';
 import { openDatabase } from '../../src/db/database.js';
 import { Store } from '../../src/db/store.js';
 import type { RepoRef, TimeWindow } from '../../src/domain/types.js';
+import type { NarrativeModel } from '../../src/narrative/llmClient.js';
+import { NarrativeService } from '../../src/narrative/narrativeService.js';
 import { ReviewFlowService } from '../../src/services/reviewFlowService.js';
 import type { SyncResult } from '../../src/sync/syncService.js';
 import { AS_OF, commits, pullRequests, reviews } from '../fixtures/smallRepo.js';
@@ -59,8 +61,11 @@ export type Harness = {
   close: () => Promise<void>;
 };
 
-/** Builds the app over a `:memory:` store seeded with the small-repo fixture, capturing log lines. */
-export async function createHarness(opts: { webRoot?: string } = {}): Promise<Harness> {
+/**
+ * Builds the app over a `:memory:` store seeded with the small-repo fixture, capturing log lines. The narrative
+ * route is backed by `narrativeModel` when given, otherwise it is not configured.
+ */
+export async function createHarness(opts: { webRoot?: string; narrativeModel?: NarrativeModel } = {}): Promise<Harness> {
   const db = openDatabase(':memory:');
   const store = new Store(db);
   const repo = store.upsertRepo({ key: 'fastify/fastify', owner: 'fastify', name: 'fastify', defaultBranch: 'main' });
@@ -76,12 +81,16 @@ export async function createHarness(opts: { webRoot?: string } = {}): Promise<Ha
       callback();
     },
   });
+  const logger = createLogger(testConfig, { level: 'debug' }, stream);
+  const narrative = opts.narrativeModel
+    ? new NarrativeService({ model: opts.narrativeModel, modelName: testConfig.anthropicModel, store, reviewFlow, logger })
+    : null;
   const app = await buildApp({
     config: testConfig,
     store,
     reviewFlow,
-    narrative: null,
-    logger: createLogger(testConfig, { level: 'debug' }, stream),
+    narrative,
+    logger,
     webRoot: opts.webRoot,
   });
   return {

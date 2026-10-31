@@ -26,6 +26,7 @@ function harness(responses: Array<Response | Error>) {
   const logs: Array<{ obj: object; msg?: string }> = [];
   const logger: Logger = {
     debug: (obj, msg) => logs.push({ obj, msg }),
+    info: (obj, msg) => logs.push({ obj, msg }),
     warn: (obj, msg) => logs.push({ obj, msg }),
   };
   const delays: number[] = [];

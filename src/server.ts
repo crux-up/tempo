@@ -5,6 +5,8 @@ import { openDatabase } from './db/database.js';
 import { Store } from './db/store.js';
 import { ConfigError } from './errors.js';
 import { createGitHubClient } from './github/client.js';
+import { createAnthropicNarrativeModel } from './narrative/llmClient.js';
+import { NarrativeService } from './narrative/narrativeService.js';
 import { ReviewFlowService } from './services/reviewFlowService.js';
 import { SyncService } from './sync/syncService.js';
 
@@ -38,7 +40,17 @@ async function main(): Promise<void> {
     logger,
   });
   const reviewFlow = new ReviewFlowService({ store, sync });
-  const app = await buildApp({ config, store, reviewFlow, narrative: null, logger });
+  const narrative = config.anthropicApiKey
+    ? new NarrativeService({
+        model: createAnthropicNarrativeModel({ apiKey: config.anthropicApiKey, model: config.anthropicModel, logger }),
+        modelName: config.anthropicModel,
+        store,
+        reviewFlow,
+        logger,
+      })
+    : null;
+  if (!narrative) logger.warn({}, 'ANTHROPIC_API_KEY is not set; the narrative endpoint will answer 503');
+  const app = await buildApp({ config, store, reviewFlow, narrative, logger });
 
   let closing = false;
   const shutdown = async (signal: NodeJS.Signals) => {
