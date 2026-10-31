@@ -25,7 +25,7 @@ The steps take about 60 seconds after `npm install`. The native SQLite module an
 
 ### Prerequisites
 
-- Node.js 24 or later, with npm.
+- Node.js 24 or later, with npm. You do not need C++ build tools. The `.npmrc` file in the repository stops install scripts, and SQLite loads from a prebuilt binary.
 - A fine-grained GitHub personal access token. Give it "Public repositories (read-only)" access. Give it no other permissions.
 - Optional: an Anthropic API key. Tempo needs this key only for the narrative endpoint.
 
@@ -190,7 +190,7 @@ A PR that closes without a review is not in `timeToFirstReview` and not in `awai
 | Field | What it counts |
 |---|---|
 | `login` | The GitHub login. For a commit with no linked GitHub account, this field holds the git author name. |
-| `unlinked` | `true` when `login` is a git author name with no linked GitHub account. Tempo keeps these rows apart from GitHub accounts. |
+| `unlinked` | `true` when `login` is a git author name with no linked GitHub account. Tempo keeps these rows apart from GitHub accounts. The exception is a git name that equals a verified GitHub bot login in the same report: Tempo counts that name as the bot. |
 | `commits` | Commits on the default branch in the window. Tempo uses the committer date. |
 | `prsOpened` | PRs that the person created in the window. |
 | `prsMerged` | PRs by the person that merged in the window. |
@@ -363,7 +363,7 @@ Add `--narrative` to also make and store the narrative. This option needs `ANTHR
 
 ## Known limitations
 
-- **Committer date.** Tempo counts commits by committer date, because the GitHub history filter uses that date. A rebase can move a commit into a later window. A merge commit can add branch commits with older dates. Each refresh reads the commits again from 14 days before the last sync. Tempo does not count a branch commit that is older than that.
+- **Committer date.** Tempo counts commits by committer date, because the GitHub history filter uses that date. A rebase can move a commit into a later window. A merge commit can add branch commits with older dates. Each refresh reads the commits again from 14 days before the last sync. Tempo does not count a branch commit that is more than 14 days older than the last sync.
 - **Synchronous sync.** A request waits for its sync. A large repository can need several requests before `coverage.partial` becomes `false`. Each request continues the backfill from a stored page position.
 - **Stuck refresh.** A refresh can stay incomplete when more PRs change in one TTL period than `SYNC_MAX_PAGES` pages can hold.
 - **Narrative excludes today.** An open narrative window ends at the last UTC midnight. The dashboard default range ends yesterday for the same reason.

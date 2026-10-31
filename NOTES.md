@@ -79,6 +79,7 @@ The service then loads the window's rows, drops anything after `dataAsOf` so the
 
 ## Trade-offs and things deliberately not done
 
+- **`ignore-scripts=true` in `.npmrc`.** `better-sqlite3` ships prebuilt binaries, but its `binding.gyp` makes npm run `node-gyp rebuild`, which fails on machines without C++ build tools. Skipping install scripts avoids that and also blocks scripts from dependencies. The cost is that a platform with no prebuilt binary needs a manual `npm rebuild better-sqlite3 --ignore-scripts=false`.
 - **Review records vs distinct PRs.** GitHub records a `COMMENTED` review for each thread reply, so raw review counts reward long discussions. Shares and concentration use distinct PRs reviewed. Raw counts are still reported (`reviewsSubmitted`) for comparison.
 - **Bot PRs.** With bots excluded, PRs opened by bots leave the PR counts, but human reviews of them still count: reviewing a dependency bump is real work.
 - **Committer date for commits.** GitHub's history `since`/`until` filter uses committer date, so Tempo counts by it too. A rebased commit can land in a later window than when it was written. A merge commit brings in branch commits with their original, older committer dates, so a refresh re-reads commits from 14 days before the previous sync (upserts make the overlap harmless). A branch commit older than that when it is merged is missed, although a fresh database would count it.
