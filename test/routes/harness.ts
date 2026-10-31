@@ -24,6 +24,7 @@ export const testConfig: Config = {
   syncTtlMinutes: 15,
   syncMaxPages: 40,
   syncMaxSeconds: 25,
+  narrativeMaxPerHour: 30,
   logLevel: 'info',
 };
 
@@ -80,7 +81,9 @@ export type Harness = {
  * Builds the app over a `:memory:` store seeded with the small-repo fixture, capturing log lines. The narrative
  * route is backed by `narrativeModel` when given, otherwise it is not configured.
  */
-export async function createHarness(opts: { webRoot?: string; narrativeModel?: NarrativeModel } = {}): Promise<Harness> {
+export async function createHarness(
+  opts: { webRoot?: string; narrativeModel?: NarrativeModel; narrativeMaxPerHour?: number } = {},
+): Promise<Harness> {
   const db = openDatabase(':memory:');
   const store = new Store(db);
   const repo = store.upsertRepo({ key: 'fastify/fastify', owner: 'fastify', name: 'fastify', defaultBranch: 'main' });
@@ -99,7 +102,15 @@ export async function createHarness(opts: { webRoot?: string; narrativeModel?: N
   });
   const logger = createLogger(testConfig, { level: 'debug' }, stream);
   const narrative = opts.narrativeModel
-    ? new NarrativeService({ model: opts.narrativeModel, modelName: testConfig.anthropicModel, store, reviewFlow, logger })
+    ? new NarrativeService({
+        model: opts.narrativeModel,
+        modelName: testConfig.anthropicModel,
+        store,
+        reviewFlow,
+        logger,
+        maxGenerationsPerHour: opts.narrativeMaxPerHour ?? testConfig.narrativeMaxPerHour,
+        now: () => clock.now,
+      })
     : null;
   const app = await buildApp({
     config: testConfig,

@@ -22,7 +22,7 @@ export const ReviewFlowQuerySchema = z.object({
     .optional()
     .describe(
       'Window start (inclusive): YYYY-MM-DD (UTC midnight) or ISO-8601 datetime with offset. ' +
-        'Default: to minus 30 days.',
+        'Default: to minus 30 days. At most 2 years before now.',
     ),
   to: z
     .string()

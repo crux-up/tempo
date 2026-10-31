@@ -15,8 +15,14 @@ describe('loadConfig', () => {
       syncTtlMinutes: 15,
       syncMaxPages: 40,
       syncMaxSeconds: 25,
+      narrativeMaxPerHour: 30,
       logLevel: 'info',
     });
+  });
+
+  it('reads NARRATIVE_MAX_PER_HOUR as a positive integer', () => {
+    expect(loadConfig({ GITHUB_TOKEN: 'x', NARRATIVE_MAX_PER_HOUR: '5' }).narrativeMaxPerHour).toBe(5);
+    expect(() => loadConfig({ GITHUB_TOKEN: 'x', NARRATIVE_MAX_PER_HOUR: '0' })).toThrow(/NARRATIVE_MAX_PER_HOUR/);
   });
 
   it('reads overrides and coerces numbers', () => {

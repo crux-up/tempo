@@ -63,6 +63,7 @@ async function main(): Promise<void> {
         store,
         reviewFlow: new ReviewFlowService({ store, sync }),
         logger,
+        maxGenerationsPerHour: config.narrativeMaxPerHour,
       });
       const startedAt = performance.now();
       const narrative = await narratives.getNarrative(ref, { from, to });

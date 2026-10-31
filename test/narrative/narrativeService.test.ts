@@ -2,7 +2,7 @@ import type { Database } from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../../src/db/database.js';
 import { Store } from '../../src/db/store.js';
-import { LlmError } from '../../src/errors.js';
+import { LlmError, NarrativeBudgetError } from '../../src/errors.js';
 import type { Logger } from '../../src/logger.js';
 import { NarrativeService } from '../../src/narrative/narrativeService.js';
 import { PROMPT_VERSION } from '../../src/narrative/prompt.js';
@@ -33,13 +33,15 @@ const logger: Logger = {
   warn: (obj, msg) => logs.push({ level: 'warn', obj: obj as Record<string, unknown>, msg }),
 };
 
-const build = (modelName = 'claude-opus-5-5') =>
+const build = (modelName = 'claude-opus-5-5', maxGenerationsPerHour = 30) =>
   new NarrativeService({
     model,
     modelName,
     store,
     reviewFlow: new ReviewFlowService({ store, sync, now: () => now }),
     logger,
+    maxGenerationsPerHour,
+    now: () => now,
   });
 
 beforeEach(() => {
@@ -269,6 +271,26 @@ describe('NarrativeService', () => {
     const res = await service.getNarrative(REPO, ACTIVE);
     expect(res.cached).toBe(false);
     expect(model.calls).toBe(2);
+  });
+
+  it('limits new generations per hour across all requests, refreshes included, and keeps serving the cache', async () => {
+    service = build('claude-opus-5-5', 2);
+    await service.getNarrative(REPO, ACTIVE);
+    await service.getNarrative(REPO, { ...ACTIVE, refresh: 'true' });
+    now = new Date(AS_OF.getTime() + 10 * 60_000);
+
+    const error = await service.getNarrative(REPO, { ...ACTIVE, includeBots: 'true' }).catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(NarrativeBudgetError);
+    expect((error as NarrativeBudgetError).retryAfterSeconds).toBe(50 * 60);
+    expect(model.calls).toBe(2);
+    expect(await service.getNarrative(REPO, ACTIVE)).toMatchObject({ cached: true });
+    expect((await service.getNarrative(REPO, QUIET)).model).toBe('none');
+
+    now = new Date(AS_OF.getTime() + 60 * 60_000);
+    await expect(service.getNarrative(REPO, { ...ACTIVE, includeBots: 'true' })).resolves.toMatchObject({
+      cached: false,
+    });
   });
 
   it('logs cache misses and hits with verification counts and token usage', async () => {

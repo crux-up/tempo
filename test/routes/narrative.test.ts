@@ -10,9 +10,9 @@ const WINDOW_QS = 'from=2026-03-02&to=2026-03-16';
 let h: Harness;
 let model: FakeNarrativeModel;
 
-const start = async (configured = true) => {
+const start = async (configured = true, narrativeMaxPerHour?: number) => {
   model = new FakeNarrativeModel();
-  h = await createHarness(configured ? { narrativeModel: model } : {});
+  h = await createHarness(configured ? { narrativeModel: model, narrativeMaxPerHour } : {});
 };
 
 afterEach(async () => {
@@ -141,6 +141,21 @@ describe('GET /api/v1/repos/:owner/:repo/review-flow/narrative', () => {
     expectProblem(last!, 429, 'rate-limited');
     expect(Number(last!.headers['retry-after'])).toBeGreaterThan(0);
     expect((await get(`/api/v1/repos/fastify/fastify/review-flow?${WINDOW_QS}`)).statusCode).toBe(200);
+  });
+
+  it('answers 429 with Retry-After once the server-wide hourly budget of new narratives is used up', async () => {
+    await start(true, 1);
+    expect((await get(`${PATH}?${WINDOW_QS}`)).statusCode).toBe(200);
+
+    const res = await get(`${PATH}?${WINDOW_QS}&refresh=true`);
+
+    expectProblem(res, 429, 'narrative-budget-exhausted');
+    expect(res.headers['retry-after']).toBe('3600');
+  });
+
+  it('rejects a window that starts more than two years ago', async () => {
+    await start();
+    expectProblem(await get(`${PATH}?from=2024-03-01&to=2024-04-01`), 400, 'invalid-request');
   });
 
   it('is documented in the OpenAPI document with a response schema', async () => {

@@ -24,7 +24,8 @@ export const narrativeRoutes: FastifyPluginAsyncZod<{ narrative: NarrativeServic
           'before `dataAsOf` and is measured at that instant, so the narrative stays the same, and cached, for the ' +
           'whole day; a defaulted `from` is 30 days before that end. An ' +
           'uncached request waits for the model and can take up to about 150 seconds before it succeeds or fails ' +
-          `with 502. Limited to ${NARRATIVE_RATE_LIMIT_PER_MINUTE} requests per minute per client.`,
+          `with 502. Limited to ${NARRATIVE_RATE_LIMIT_PER_MINUTE} requests per minute per client, and to ` +
+          'NARRATIVE_MAX_PER_HOUR new (uncached) narratives per hour across all clients.',
         tags: ['metrics'],
         params: RepoParams,
         querystring: NarrativeQuerySchema,
@@ -32,7 +33,10 @@ export const narrativeRoutes: FastifyPluginAsyncZod<{ narrative: NarrativeServic
           200: jsonResponse('Verified narrative for the resolved window', NarrativeResponseSchema),
           400: problemResponse('Invalid repository path or query parameters'),
           404: problemResponse('Repository not found or not accessible'),
-          429: problemResponse('Client rate limit exceeded; see Retry-After'),
+          429: problemResponse(
+            'Client rate limit exceeded, or the server-wide hourly budget of new narratives ' +
+              '(NARRATIVE_MAX_PER_HOUR) is used up; see Retry-After',
+          ),
           502: problemResponse('GitHub or the language model returned an error, or the model declined'),
           503: problemResponse(
             'ANTHROPIC_API_KEY is not set or was rejected, the GitHub token was rejected, or an upstream rate limit ' +

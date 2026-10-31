@@ -32,6 +32,7 @@ async function main(): Promise<void> {
         store,
         reviewFlow,
         logger,
+        maxGenerationsPerHour: config.narrativeMaxPerHour,
       })
     : null;
   if (!narrative) logger.warn({}, 'ANTHROPIC_API_KEY is not set; the narrative endpoint will answer 503');

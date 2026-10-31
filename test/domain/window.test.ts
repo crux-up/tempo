@@ -23,6 +23,14 @@ describe('parseWindow', () => {
     expect(w.from.toISOString()).toBe('2026-03-02T07:00:00.000Z');
   });
 
+  it('rejects a from more than two years before now', () => {
+    expect(() => parseWindow({ from: '2024-10-31T11:59:59Z', to: '2025-01-01' }, NOW)).toThrow(BadRequestError);
+    expect(() => parseWindow({ from: '2024-10-31T11:59:59Z', to: '2025-01-01' }, NOW)).toThrow(/2 years/);
+    expect(parseWindow({ from: '2024-10-31T12:00:00Z', to: '2025-01-01' }, NOW).from.toISOString()).toBe(
+      '2024-10-31T12:00:00.000Z',
+    );
+  });
+
   it('defaults from to 30 days before an explicit to', () => {
     const w = parseWindow({ to: '2026-04-01' }, NOW);
     expect(w.from.toISOString()).toBe('2026-03-02T00:00:00.000Z');

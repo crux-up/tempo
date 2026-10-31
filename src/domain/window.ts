@@ -5,6 +5,8 @@ export const DAY_MS = 86_400_000;
 /** Length of the window when the request gives no `from`. */
 export const DEFAULT_WINDOW_DAYS = 30;
 const MAX_DAYS = 366;
+/** How far back a window may start; older history would cost a long backfill against the shared GitHub quota. */
+const MAX_LOOKBACK_YEARS = 2;
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const DATE_TIME = /^(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -32,6 +34,11 @@ export function parseWindow(query: { from?: string; to?: string }, now: Date): T
   const from =
     query.from === undefined ? new Date(to.getTime() - DEFAULT_WINDOW_DAYS * DAY_MS) : parseInstant('from', query.from);
   if (from >= to) throw new BadRequestError('from must be earlier than to');
+  const earliest = new Date(now);
+  earliest.setUTCFullYear(earliest.getUTCFullYear() - MAX_LOOKBACK_YEARS);
+  if (from < earliest) {
+    throw new BadRequestError(`from must not be more than ${MAX_LOOKBACK_YEARS} years before now`);
+  }
   if (to.getTime() - from.getTime() > MAX_DAYS * DAY_MS) {
     throw new BadRequestError(`The window must not exceed ${MAX_DAYS} days`);
   }

@@ -12,6 +12,8 @@ export type Config = {
   syncTtlMinutes: number;
   syncMaxPages: number;
   syncMaxSeconds: number;
+  /** New (uncached) narratives allowed per rolling hour, across all clients. */
+  narrativeMaxPerHour: number;
   logLevel: string;
 };
 
@@ -40,6 +42,7 @@ const envSchema = z.object({
   SYNC_TTL_MINUTES: positiveInt(15),
   SYNC_MAX_PAGES: positiveInt(40),
   SYNC_MAX_SECONDS: positiveInt(25),
+  NARRATIVE_MAX_PER_HOUR: positiveInt(30),
   LOG_LEVEL: z.preprocess(
     blankToUndefined,
     z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -67,6 +70,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     syncTtlMinutes: e.SYNC_TTL_MINUTES,
     syncMaxPages: e.SYNC_MAX_PAGES,
     syncMaxSeconds: e.SYNC_MAX_SECONDS,
+    narrativeMaxPerHour: e.NARRATIVE_MAX_PER_HOUR,
     logLevel: e.LOG_LEVEL,
   };
 }

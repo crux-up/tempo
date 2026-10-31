@@ -105,6 +105,16 @@ export class TooManyRequestsError extends AppError {
   }
 }
 
+export class NarrativeBudgetError extends AppError {
+  readonly status = 429;
+  readonly type = `${PROBLEM_BASE}narrative-budget-exhausted`;
+  readonly title = 'Narrative budget exhausted';
+  constructor(retryAfterSeconds: number) {
+    super(`The server's hourly budget of new narratives is used up; retry in ${retryAfterSeconds} seconds`);
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 export class NotReadyError extends AppError {
   readonly status = 503;
   readonly type = `${PROBLEM_BASE}not-ready`;

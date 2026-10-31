@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Store } from '../db/store.js';
 import { hasActivity } from '../domain/report.js';
 import type { Coverage, NarrativeQuery, RepoRef, ReviewFlowReport } from '../domain/types.js';
+import { NarrativeBudgetError } from '../errors.js';
 import type { Logger } from '../logger.js';
 import { ordinal } from '../metrics/stats.js';
 import type { ReviewFlowService } from '../services/reviewFlowService.js';
@@ -28,6 +29,9 @@ type NarrativeDeps = {
   store: Store;
   reviewFlow: Pick<ReviewFlowService, 'getDailyReport'>;
   logger: Logger;
+  /** Model calls allowed per rolling hour across all requests; cached and empty narratives do not count. */
+  maxGenerationsPerHour: number;
+  now?: () => Date;
 };
 
 type StoredBody = Omit<NarrativeResponse, 'cached'>;
@@ -36,6 +40,29 @@ const StoredBodySchema = NarrativeResponseSchema.omit({ cached: true });
 
 /** Reported as the model of a narrative that no model wrote. */
 const NO_MODEL = 'none';
+
+const HOUR_MS = 3_600_000;
+
+/** At most `max` events in any rolling hour. */
+class HourlyBudget {
+  private readonly taken: number[] = [];
+
+  constructor(
+    private readonly max: number,
+    private readonly now: () => number,
+  ) {}
+
+  /** Records one event, or throws NarrativeBudgetError with the seconds until the oldest one leaves the hour. */
+  take(): void {
+    const at = this.now();
+    while (this.taken.length > 0 && (this.taken[0] as number) <= at - HOUR_MS) this.taken.shift();
+    if (this.taken.length >= this.max) {
+      const freeAt = (this.taken[0] as number) + HOUR_MS;
+      throw new NarrativeBudgetError(Math.max(1, Math.ceil((freeAt - at) / 1000)));
+    }
+    this.taken.push(at);
+  }
+}
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 
@@ -65,8 +92,12 @@ const reportContext = (report: ReviewFlowReport) => ({
  */
 export class NarrativeService {
   private readonly inFlight = new Map<string, Promise<StoredBody>>();
+  private readonly budget: HourlyBudget;
 
-  constructor(private readonly deps: NarrativeDeps) {}
+  constructor(private readonly deps: NarrativeDeps) {
+    const now = deps.now ?? (() => new Date());
+    this.budget = new HourlyBudget(deps.maxGenerationsPerHour, () => now().getTime());
+  }
 
   async getNarrative(repo: RepoRef, query: NarrativeQuery): Promise<NarrativeResponse> {
     const startedAt = performance.now();
@@ -87,6 +118,8 @@ export class NarrativeService {
 
     let pending = this.inFlight.get(key);
     if (!pending) {
+      // Counted when the model call starts: a failed call costs as much as one that succeeds.
+      this.budget.take();
       pending = this.generate(key, report, sheet, startedAt).finally(() => this.inFlight.delete(key));
       this.inFlight.set(key, pending);
     }
