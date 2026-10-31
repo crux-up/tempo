@@ -14,6 +14,8 @@ export type Config = {
   logLevel: string;
 };
 
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-opus-5-5';
+
 // Empty strings (e.g. `PORT=` in a .env file) count as unset.
 const blankToUndefined = (value: unknown) => (value === '' ? undefined : value);
 
@@ -24,7 +26,7 @@ const positiveInt = (fallback: number) =>
 const envSchema = z.object({
   GITHUB_TOKEN: z.string().min(1),
   ANTHROPIC_API_KEY: z.preprocess(blankToUndefined, z.string().optional()),
-  ANTHROPIC_MODEL: text('claude-opus-5-5'),
+  ANTHROPIC_MODEL: text(DEFAULT_ANTHROPIC_MODEL),
   HOST: z.preprocess(
     blankToUndefined,
     z

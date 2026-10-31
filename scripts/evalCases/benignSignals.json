@@ -1,5 +1,5 @@
 {
-  "name": "no signal",
+  "name": "benign-signals",
   "expectHypothesis": false,
   "sheet": {
     "repo": "acme/docs",

@@ -1,6 +1,7 @@
 {
   "name": "bottleneck",
   "expectHypothesis": true,
+  "minConfidence": 0.6,
   "sheet": {
     "repo": "acme/payments",
     "window": {
