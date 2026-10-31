@@ -1,0 +1,546 @@
+{
+  "name": "no signal",
+  "expectHypothesis": false,
+  "sheet": {
+    "repo": "acme/docs",
+    "window": {
+      "from": "2026-09-01T00:00:00.000Z",
+      "to": "2026-10-01T00:00:00.000Z"
+    },
+    "facts": [
+      {
+        "id": "meta.includeBots",
+        "label": "Bot accounts are counted as people (1 = yes, 0 = no)",
+        "value": 0,
+        "unit": "count"
+      },
+      {
+        "id": "meta.coveragePartial",
+        "label": "Synced data covers only part of the window (1 = yes, 0 = no)",
+        "value": 0,
+        "unit": "count"
+      },
+      {
+        "id": "team.prsOpened",
+        "label": "PRs opened",
+        "value": 42,
+        "unit": "count"
+      },
+      {
+        "id": "team.prsMerged",
+        "label": "PRs merged",
+        "value": 41,
+        "unit": "count"
+      },
+      {
+        "id": "team.reviewsSubmitted",
+        "label": "Reviews submitted",
+        "value": 70,
+        "unit": "count"
+      },
+      {
+        "id": "team.timeToFirstReview.median",
+        "label": "Median hours to first review",
+        "value": 6.1,
+        "unit": "hours",
+        "sampleSize": 40
+      },
+      {
+        "id": "team.timeToFirstReview.p90",
+        "label": "90th percentile hours to first review",
+        "value": 17,
+        "unit": "hours",
+        "sampleSize": 40
+      },
+      {
+        "id": "team.timeToFirstReview.sampleSize",
+        "label": "PRs with a measured time to first review",
+        "value": 40,
+        "unit": "count"
+      },
+      {
+        "id": "team.awaitingFirstReview.count",
+        "label": "Open PRs awaiting a first review",
+        "value": 2,
+        "unit": "count"
+      },
+      {
+        "id": "team.awaitingFirstReview.medianAgeHours",
+        "label": "Median age in hours of PRs awaiting a first review",
+        "value": 8,
+        "unit": "hours",
+        "sampleSize": 2
+      },
+      {
+        "id": "team.timeToMerge.median",
+        "label": "Median hours to merge",
+        "value": 18,
+        "unit": "hours",
+        "sampleSize": 41
+      },
+      {
+        "id": "team.timeToMerge.p90",
+        "label": "90th percentile hours to merge",
+        "value": 48,
+        "unit": "hours",
+        "sampleSize": 41
+      },
+      {
+        "id": "team.timeToMerge.sampleSize",
+        "label": "PRs with a measured time to merge",
+        "value": 41,
+        "unit": "count"
+      },
+      {
+        "id": "team.mergedWithoutReview.count",
+        "label": "PRs merged without a review",
+        "value": 2,
+        "unit": "count"
+      },
+      {
+        "id": "team.mergedWithoutReview.share",
+        "label": "Share of merged PRs merged without a review (fraction 0-1)",
+        "value": 0.05,
+        "unit": "share"
+      },
+      {
+        "id": "team.reviewConcentration.topReviewer",
+        "label": "Top reviewer by PRs reviewed",
+        "value": "alex-p",
+        "unit": "login"
+      },
+      {
+        "id": "team.reviewConcentration.topReviewerShare",
+        "label": "Top reviewer's share of PR reviews, counted once per reviewer per PR (fraction 0-1)",
+        "value": 0.28,
+        "unit": "share"
+      },
+      {
+        "id": "team.reviewConcentration.reviewersFor50Pct",
+        "label": "Fewest reviewers covering half of PR reviews (counted per reviewer per PR)",
+        "value": 3,
+        "unit": "count"
+      },
+      {
+        "id": "team.unlinkedCommits",
+        "label": "Commits by authors without a linked GitHub account",
+        "value": 0,
+        "unit": "count"
+      },
+      {
+        "id": "team.peopleCount",
+        "label": "People with a linked GitHub account active in the window",
+        "value": 4,
+        "unit": "count"
+      },
+      {
+        "id": "person.alex-p.prsOpened",
+        "label": "alex-p: PRs opened",
+        "value": 11,
+        "unit": "count"
+      },
+      {
+        "id": "person.alex-p.prsMerged",
+        "label": "alex-p: PRs merged",
+        "value": 11,
+        "unit": "count"
+      },
+      {
+        "id": "person.alex-p.linesChanged",
+        "label": "alex-p: lines added plus deleted in merged PRs",
+        "value": 1200,
+        "unit": "count"
+      },
+      {
+        "id": "person.alex-p.reviewsSubmitted",
+        "label": "alex-p: reviews submitted",
+        "value": 20,
+        "unit": "count"
+      },
+      {
+        "id": "person.alex-p.prsReviewed",
+        "label": "alex-p: PRs reviewed",
+        "value": 15,
+        "unit": "count"
+      },
+      {
+        "id": "person.alex-p.approvals",
+        "label": "alex-p: approvals",
+        "value": 12,
+        "unit": "count"
+      },
+      {
+        "id": "person.alex-p.changesRequested",
+        "label": "alex-p: changes requested",
+        "value": 2,
+        "unit": "count"
+      },
+      {
+        "id": "person.alex-p.reviewComments",
+        "label": "alex-p: review comments",
+        "value": 19,
+        "unit": "count"
+      },
+      {
+        "id": "person.alex-p.reviewShare",
+        "label": "alex-p: share of PR reviews, counted once per reviewer per PR (fraction 0-1)",
+        "value": 0.28,
+        "unit": "share"
+      },
+      {
+        "id": "person.alex-p.codeShare",
+        "label": "alex-p: share of the team's merged PRs (fraction 0-1)",
+        "value": 0.27,
+        "unit": "share"
+      },
+      {
+        "id": "person.alex-p.commits",
+        "label": "alex-p: commits",
+        "value": 18,
+        "unit": "count"
+      },
+      {
+        "id": "person.bea-n.prsOpened",
+        "label": "bea-n: PRs opened",
+        "value": 10,
+        "unit": "count"
+      },
+      {
+        "id": "person.bea-n.prsMerged",
+        "label": "bea-n: PRs merged",
+        "value": 10,
+        "unit": "count"
+      },
+      {
+        "id": "person.bea-n.linesChanged",
+        "label": "bea-n: lines added plus deleted in merged PRs",
+        "value": 1100,
+        "unit": "count"
+      },
+      {
+        "id": "person.bea-n.reviewsSubmitted",
+        "label": "bea-n: reviews submitted",
+        "value": 18,
+        "unit": "count"
+      },
+      {
+        "id": "person.bea-n.prsReviewed",
+        "label": "bea-n: PRs reviewed",
+        "value": 14,
+        "unit": "count"
+      },
+      {
+        "id": "person.bea-n.approvals",
+        "label": "bea-n: approvals",
+        "value": 11,
+        "unit": "count"
+      },
+      {
+        "id": "person.bea-n.changesRequested",
+        "label": "bea-n: changes requested",
+        "value": 2,
+        "unit": "count"
+      },
+      {
+        "id": "person.bea-n.reviewComments",
+        "label": "bea-n: review comments",
+        "value": 17,
+        "unit": "count"
+      },
+      {
+        "id": "person.bea-n.reviewShare",
+        "label": "bea-n: share of PR reviews, counted once per reviewer per PR (fraction 0-1)",
+        "value": 0.26,
+        "unit": "share"
+      },
+      {
+        "id": "person.bea-n.codeShare",
+        "label": "bea-n: share of the team's merged PRs (fraction 0-1)",
+        "value": 0.24,
+        "unit": "share"
+      },
+      {
+        "id": "person.bea-n.commits",
+        "label": "bea-n: commits",
+        "value": 17,
+        "unit": "count"
+      },
+      {
+        "id": "person.cal-j.prsOpened",
+        "label": "cal-j: PRs opened",
+        "value": 11,
+        "unit": "count"
+      },
+      {
+        "id": "person.cal-j.prsMerged",
+        "label": "cal-j: PRs merged",
+        "value": 10,
+        "unit": "count"
+      },
+      {
+        "id": "person.cal-j.linesChanged",
+        "label": "cal-j: lines added plus deleted in merged PRs",
+        "value": 1000,
+        "unit": "count"
+      },
+      {
+        "id": "person.cal-j.reviewsSubmitted",
+        "label": "cal-j: reviews submitted",
+        "value": 17,
+        "unit": "count"
+      },
+      {
+        "id": "person.cal-j.prsReviewed",
+        "label": "cal-j: PRs reviewed",
+        "value": 13,
+        "unit": "count"
+      },
+      {
+        "id": "person.cal-j.approvals",
+        "label": "cal-j: approvals",
+        "value": 10,
+        "unit": "count"
+      },
+      {
+        "id": "person.cal-j.changesRequested",
+        "label": "cal-j: changes requested",
+        "value": 3,
+        "unit": "count"
+      },
+      {
+        "id": "person.cal-j.reviewComments",
+        "label": "cal-j: review comments",
+        "value": 15,
+        "unit": "count"
+      },
+      {
+        "id": "person.cal-j.reviewShare",
+        "label": "cal-j: share of PR reviews, counted once per reviewer per PR (fraction 0-1)",
+        "value": 0.24,
+        "unit": "share"
+      },
+      {
+        "id": "person.cal-j.codeShare",
+        "label": "cal-j: share of the team's merged PRs (fraction 0-1)",
+        "value": 0.24,
+        "unit": "share"
+      },
+      {
+        "id": "person.cal-j.commits",
+        "label": "cal-j: commits",
+        "value": 16,
+        "unit": "count"
+      },
+      {
+        "id": "person.dee-f.prsOpened",
+        "label": "dee-f: PRs opened",
+        "value": 10,
+        "unit": "count"
+      },
+      {
+        "id": "person.dee-f.prsMerged",
+        "label": "dee-f: PRs merged",
+        "value": 10,
+        "unit": "count"
+      },
+      {
+        "id": "person.dee-f.linesChanged",
+        "label": "dee-f: lines added plus deleted in merged PRs",
+        "value": 900,
+        "unit": "count"
+      },
+      {
+        "id": "person.dee-f.reviewsSubmitted",
+        "label": "dee-f: reviews submitted",
+        "value": 15,
+        "unit": "count"
+      },
+      {
+        "id": "person.dee-f.prsReviewed",
+        "label": "dee-f: PRs reviewed",
+        "value": 12,
+        "unit": "count"
+      },
+      {
+        "id": "person.dee-f.approvals",
+        "label": "dee-f: approvals",
+        "value": 9,
+        "unit": "count"
+      },
+      {
+        "id": "person.dee-f.changesRequested",
+        "label": "dee-f: changes requested",
+        "value": 2,
+        "unit": "count"
+      },
+      {
+        "id": "person.dee-f.reviewComments",
+        "label": "dee-f: review comments",
+        "value": 14,
+        "unit": "count"
+      },
+      {
+        "id": "person.dee-f.reviewShare",
+        "label": "dee-f: share of PR reviews, counted once per reviewer per PR (fraction 0-1)",
+        "value": 0.22,
+        "unit": "share"
+      },
+      {
+        "id": "person.dee-f.codeShare",
+        "label": "dee-f: share of the team's merged PRs (fraction 0-1)",
+        "value": 0.25,
+        "unit": "share"
+      },
+      {
+        "id": "person.dee-f.commits",
+        "label": "dee-f: commits",
+        "value": 14,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W36.prsOpened",
+        "label": "2026-W36: PRs opened",
+        "value": 8,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W36.prsMerged",
+        "label": "2026-W36: PRs merged",
+        "value": 8,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W36.reviewsSubmitted",
+        "label": "2026-W36: reviews submitted",
+        "value": 14,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W36.medianFirstReviewHours",
+        "label": "2026-W36: median hours to first review",
+        "value": 6,
+        "unit": "hours",
+        "sampleSize": 8
+      },
+      {
+        "id": "week.2026-W37.prsOpened",
+        "label": "2026-W37: PRs opened",
+        "value": 9,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W37.prsMerged",
+        "label": "2026-W37: PRs merged",
+        "value": 8,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W37.reviewsSubmitted",
+        "label": "2026-W37: reviews submitted",
+        "value": 14,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W37.medianFirstReviewHours",
+        "label": "2026-W37: median hours to first review",
+        "value": 6.3,
+        "unit": "hours",
+        "sampleSize": 9
+      },
+      {
+        "id": "week.2026-W38.prsOpened",
+        "label": "2026-W38: PRs opened",
+        "value": 8,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W38.prsMerged",
+        "label": "2026-W38: PRs merged",
+        "value": 8,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W38.reviewsSubmitted",
+        "label": "2026-W38: reviews submitted",
+        "value": 14,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W38.medianFirstReviewHours",
+        "label": "2026-W38: median hours to first review",
+        "value": 5.9,
+        "unit": "hours",
+        "sampleSize": 8
+      },
+      {
+        "id": "week.2026-W39.prsOpened",
+        "label": "2026-W39: PRs opened",
+        "value": 9,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W39.prsMerged",
+        "label": "2026-W39: PRs merged",
+        "value": 9,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W39.reviewsSubmitted",
+        "label": "2026-W39: reviews submitted",
+        "value": 14,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W39.medianFirstReviewHours",
+        "label": "2026-W39: median hours to first review",
+        "value": 6.2,
+        "unit": "hours",
+        "sampleSize": 9
+      },
+      {
+        "id": "week.2026-W40.prsOpened",
+        "label": "2026-W40: PRs opened",
+        "value": 8,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W40.prsMerged",
+        "label": "2026-W40: PRs merged",
+        "value": 8,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W40.reviewsSubmitted",
+        "label": "2026-W40: reviews submitted",
+        "value": 14,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W40.medianFirstReviewHours",
+        "label": "2026-W40: median hours to first review",
+        "value": 6.1,
+        "unit": "hours",
+        "sampleSize": 8
+      }
+    ],
+    "signals": [
+      {
+        "id": "signal.firstReviewWeekChange",
+        "description": "Median hours to first review went from 6.3 h in 2026-W37 to 5.9 h in 2026-W38.",
+        "factIds": [
+          "week.2026-W37.medianFirstReviewHours",
+          "week.2026-W38.medianFirstReviewHours"
+        ]
+      },
+      {
+        "id": "signal.topReviewerIsTopMerger",
+        "description": "alex-p is both the top reviewer (15 PRs reviewed) and the top merger (11 PRs merged).",
+        "factIds": [
+          "team.reviewConcentration.topReviewer",
+          "person.alex-p.prsReviewed",
+          "person.alex-p.prsMerged"
+        ]
+      }
+    ]
+  }
+}

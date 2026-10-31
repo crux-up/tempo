@@ -1,0 +1,414 @@
+{
+  "name": "tiny sample",
+  "expectHypothesis": false,
+  "sheet": {
+    "repo": "acme/internal-tools",
+    "window": {
+      "from": "2026-09-01T00:00:00.000Z",
+      "to": "2026-10-01T00:00:00.000Z"
+    },
+    "facts": [
+      {
+        "id": "meta.includeBots",
+        "label": "Bot accounts are counted as people (1 = yes, 0 = no)",
+        "value": 0,
+        "unit": "count"
+      },
+      {
+        "id": "meta.coveragePartial",
+        "label": "Synced data covers only part of the window (1 = yes, 0 = no)",
+        "value": 0,
+        "unit": "count"
+      },
+      {
+        "id": "team.prsOpened",
+        "label": "PRs opened",
+        "value": 6,
+        "unit": "count"
+      },
+      {
+        "id": "team.prsMerged",
+        "label": "PRs merged",
+        "value": 5,
+        "unit": "count"
+      },
+      {
+        "id": "team.reviewsSubmitted",
+        "label": "Reviews submitted",
+        "value": 7,
+        "unit": "count"
+      },
+      {
+        "id": "team.timeToFirstReview.median",
+        "label": "Median hours to first review",
+        "value": 20,
+        "unit": "hours",
+        "sampleSize": 5
+      },
+      {
+        "id": "team.timeToFirstReview.p90",
+        "label": "90th percentile hours to first review",
+        "value": 60,
+        "unit": "hours",
+        "sampleSize": 5
+      },
+      {
+        "id": "team.timeToFirstReview.sampleSize",
+        "label": "PRs with a measured time to first review",
+        "value": 5,
+        "unit": "count"
+      },
+      {
+        "id": "team.awaitingFirstReview.count",
+        "label": "Open PRs awaiting a first review",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "team.awaitingFirstReview.medianAgeHours",
+        "label": "Median age in hours of PRs awaiting a first review",
+        "value": 30,
+        "unit": "hours",
+        "sampleSize": 1
+      },
+      {
+        "id": "team.timeToMerge.median",
+        "label": "Median hours to merge",
+        "value": 40,
+        "unit": "hours",
+        "sampleSize": 5
+      },
+      {
+        "id": "team.timeToMerge.p90",
+        "label": "90th percentile hours to merge",
+        "value": 90,
+        "unit": "hours",
+        "sampleSize": 5
+      },
+      {
+        "id": "team.timeToMerge.sampleSize",
+        "label": "PRs with a measured time to merge",
+        "value": 5,
+        "unit": "count"
+      },
+      {
+        "id": "team.mergedWithoutReview.count",
+        "label": "PRs merged without a review",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "team.mergedWithoutReview.share",
+        "label": "Share of merged PRs merged without a review (fraction 0-1)",
+        "value": 0.2,
+        "unit": "share"
+      },
+      {
+        "id": "team.reviewConcentration.topReviewer",
+        "label": "Top reviewer by PRs reviewed",
+        "value": "dana-v",
+        "unit": "login"
+      },
+      {
+        "id": "team.reviewConcentration.topReviewerShare",
+        "label": "Top reviewer's share of PR reviews, counted once per reviewer per PR (fraction 0-1)",
+        "value": 0.5,
+        "unit": "share"
+      },
+      {
+        "id": "team.reviewConcentration.reviewersFor50Pct",
+        "label": "Fewest reviewers covering half of PR reviews (counted per reviewer per PR)",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "team.unlinkedCommits",
+        "label": "Commits by authors without a linked GitHub account",
+        "value": 0,
+        "unit": "count"
+      },
+      {
+        "id": "team.peopleCount",
+        "label": "People with a linked GitHub account active in the window",
+        "value": 2,
+        "unit": "count"
+      },
+      {
+        "id": "person.dana-v.prsOpened",
+        "label": "dana-v: PRs opened",
+        "value": 3,
+        "unit": "count"
+      },
+      {
+        "id": "person.dana-v.prsMerged",
+        "label": "dana-v: PRs merged",
+        "value": 3,
+        "unit": "count"
+      },
+      {
+        "id": "person.dana-v.linesChanged",
+        "label": "dana-v: lines added plus deleted in merged PRs",
+        "value": 600,
+        "unit": "count"
+      },
+      {
+        "id": "person.dana-v.reviewsSubmitted",
+        "label": "dana-v: reviews submitted",
+        "value": 4,
+        "unit": "count"
+      },
+      {
+        "id": "person.dana-v.prsReviewed",
+        "label": "dana-v: PRs reviewed",
+        "value": 3,
+        "unit": "count"
+      },
+      {
+        "id": "person.dana-v.approvals",
+        "label": "dana-v: approvals",
+        "value": 3,
+        "unit": "count"
+      },
+      {
+        "id": "person.dana-v.changesRequested",
+        "label": "dana-v: changes requested",
+        "value": 0,
+        "unit": "count"
+      },
+      {
+        "id": "person.dana-v.reviewComments",
+        "label": "dana-v: review comments",
+        "value": 4,
+        "unit": "count"
+      },
+      {
+        "id": "person.dana-v.reviewShare",
+        "label": "dana-v: share of PR reviews, counted once per reviewer per PR (fraction 0-1)",
+        "value": 0.5,
+        "unit": "share"
+      },
+      {
+        "id": "person.dana-v.codeShare",
+        "label": "dana-v: share of the team's merged PRs (fraction 0-1)",
+        "value": 0.6,
+        "unit": "share"
+      },
+      {
+        "id": "person.dana-v.commits",
+        "label": "dana-v: commits",
+        "value": 8,
+        "unit": "count"
+      },
+      {
+        "id": "person.eli-t.prsOpened",
+        "label": "eli-t: PRs opened",
+        "value": 3,
+        "unit": "count"
+      },
+      {
+        "id": "person.eli-t.prsMerged",
+        "label": "eli-t: PRs merged",
+        "value": 2,
+        "unit": "count"
+      },
+      {
+        "id": "person.eli-t.linesChanged",
+        "label": "eli-t: lines added plus deleted in merged PRs",
+        "value": 300,
+        "unit": "count"
+      },
+      {
+        "id": "person.eli-t.reviewsSubmitted",
+        "label": "eli-t: reviews submitted",
+        "value": 3,
+        "unit": "count"
+      },
+      {
+        "id": "person.eli-t.prsReviewed",
+        "label": "eli-t: PRs reviewed",
+        "value": 3,
+        "unit": "count"
+      },
+      {
+        "id": "person.eli-t.approvals",
+        "label": "eli-t: approvals",
+        "value": 2,
+        "unit": "count"
+      },
+      {
+        "id": "person.eli-t.changesRequested",
+        "label": "eli-t: changes requested",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "person.eli-t.reviewComments",
+        "label": "eli-t: review comments",
+        "value": 3,
+        "unit": "count"
+      },
+      {
+        "id": "person.eli-t.reviewShare",
+        "label": "eli-t: share of PR reviews, counted once per reviewer per PR (fraction 0-1)",
+        "value": 0.5,
+        "unit": "share"
+      },
+      {
+        "id": "person.eli-t.codeShare",
+        "label": "eli-t: share of the team's merged PRs (fraction 0-1)",
+        "value": 0.4,
+        "unit": "share"
+      },
+      {
+        "id": "person.eli-t.commits",
+        "label": "eli-t: commits",
+        "value": 5,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W36.prsOpened",
+        "label": "2026-W36: PRs opened",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W36.prsMerged",
+        "label": "2026-W36: PRs merged",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W36.reviewsSubmitted",
+        "label": "2026-W36: reviews submitted",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W36.medianFirstReviewHours",
+        "label": "2026-W36: median hours to first review",
+        "value": 18,
+        "unit": "hours",
+        "sampleSize": 1
+      },
+      {
+        "id": "week.2026-W37.prsOpened",
+        "label": "2026-W37: PRs opened",
+        "value": 2,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W37.prsMerged",
+        "label": "2026-W37: PRs merged",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W37.reviewsSubmitted",
+        "label": "2026-W37: reviews submitted",
+        "value": 2,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W37.medianFirstReviewHours",
+        "label": "2026-W37: median hours to first review",
+        "value": 22,
+        "unit": "hours",
+        "sampleSize": 2
+      },
+      {
+        "id": "week.2026-W38.prsOpened",
+        "label": "2026-W38: PRs opened",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W38.prsMerged",
+        "label": "2026-W38: PRs merged",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W38.reviewsSubmitted",
+        "label": "2026-W38: reviews submitted",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W38.medianFirstReviewHours",
+        "label": "2026-W38: median hours to first review",
+        "value": 15,
+        "unit": "hours",
+        "sampleSize": 1
+      },
+      {
+        "id": "week.2026-W39.prsOpened",
+        "label": "2026-W39: PRs opened",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W39.prsMerged",
+        "label": "2026-W39: PRs merged",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W39.reviewsSubmitted",
+        "label": "2026-W39: reviews submitted",
+        "value": 2,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W39.medianFirstReviewHours",
+        "label": "2026-W39: median hours to first review",
+        "value": 26,
+        "unit": "hours",
+        "sampleSize": 1
+      },
+      {
+        "id": "week.2026-W40.prsOpened",
+        "label": "2026-W40: PRs opened",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W40.prsMerged",
+        "label": "2026-W40: PRs merged",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W40.reviewsSubmitted",
+        "label": "2026-W40: reviews submitted",
+        "value": 1,
+        "unit": "count"
+      },
+      {
+        "id": "week.2026-W40.medianFirstReviewHours",
+        "label": "2026-W40: median hours to first review",
+        "value": null,
+        "unit": "hours",
+        "sampleSize": 0
+      }
+    ],
+    "signals": [
+      {
+        "id": "signal.reviewConcentration",
+        "description": "dana-v accounts for 50% of PRs reviewed, counted per reviewer.",
+        "factIds": [
+          "team.reviewConcentration.topReviewer",
+          "team.reviewConcentration.topReviewerShare"
+        ]
+      },
+      {
+        "id": "signal.topReviewerIsTopMerger",
+        "description": "dana-v is both the top reviewer (3 PRs reviewed) and the top merger (3 PRs merged).",
+        "factIds": [
+          "team.reviewConcentration.topReviewer",
+          "person.dana-v.prsReviewed",
+          "person.dana-v.prsMerged"
+        ]
+      }
+    ]
+  }
+}
