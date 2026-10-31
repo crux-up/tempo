@@ -1,4 +1,5 @@
-export const PROBLEM_BASE = 'https://tempo.dev/problems/';
+/** Problem `type` URIs are identifiers, not links: a URN needs no domain the project would have to own. */
+export const PROBLEM_BASE = 'urn:tempo:problem:';
 
 /** Raised at startup when environment configuration is missing or invalid. */
 export class ConfigError extends Error {

@@ -43,7 +43,7 @@ function expectProblem(res: Res, status: number, type: string): Record<string, u
   expect(res.statusCode).toBe(status);
   expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
   const body = res.json<Record<string, unknown>>();
-  expect(body).toMatchObject({ status, type: `https://tempo.dev/problems/${type}` });
+  expect(body).toMatchObject({ status, type: `urn:tempo:problem:${type}` });
   expect(typeof body.title).toBe('string');
   expect(typeof body.detail).toBe('string');
   expect(typeof body.instance).toBe('string');
@@ -109,7 +109,7 @@ describe('GET /api/v1/repos/:owner/:repo/review-flow', () => {
     const res = await rawGet(new URL(address), path);
     expect(res.status).toBe(400);
     expect(res.contentType).toMatch(/^application\/problem\+json/);
-    expect(JSON.parse(res.body)).toMatchObject({ type: 'https://tempo.dev/problems/invalid-request' });
+    expect(JSON.parse(res.body)).toMatchObject({ type: 'urn:tempo:problem:invalid-request' });
     expect(h.sync.calls).toHaveLength(0);
   });
 

@@ -8,7 +8,7 @@ export const PROBLEM_CONTENT_TYPE = 'application/problem+json; charset=utf-8';
 
 export const ProblemSchema = z
   .object({
-    type: z.string().describe('URI identifying the problem type'),
+    type: z.string().describe('URI identifying the problem type: urn:tempo:problem:<slug>, or about:blank'),
     title: z.string(),
     status: z.number().int(),
     detail: z.string(),

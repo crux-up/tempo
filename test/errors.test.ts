@@ -17,7 +17,7 @@ describe('error types', () => {
     expect(err).toBeInstanceOf(Error);
     expect(err.status).toBe(503);
     expect(err.retryAfterSeconds).toBe(30);
-    expect(err.type).toBe('https://tempo.dev/problems/upstream-rate-limited');
+    expect(err.type).toBe('urn:tempo:problem:upstream-rate-limited');
   });
 
   it.each([
@@ -29,7 +29,7 @@ describe('error types', () => {
     [new LlmError('llm down'), 502, 'llm-error', 'llm down'],
   ])('%o maps to status, type and detail', (err, status, slug, detail) => {
     expect(err.status).toBe(status);
-    expect(err.type).toBe(`https://tempo.dev/problems/${slug}`);
+    expect(err.type).toBe(`urn:tempo:problem:${slug}`);
     expect(err.title.length).toBeGreaterThan(0);
     expect(err.retryAfterSeconds).toBeUndefined();
     if (detail) expect(err.message).toContain(detail);

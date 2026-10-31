@@ -33,7 +33,7 @@ describe('health routes', () => {
     const res = await h.app.inject({ method: 'GET', url: '/readyz' });
     expect(res.statusCode).toBe(503);
     expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
-    expect(res.json()).toMatchObject({ status: 503, type: 'https://tempo.dev/problems/not-ready' });
+    expect(res.json()).toMatchObject({ status: 503, type: 'urn:tempo:problem:not-ready' });
   });
 });
 

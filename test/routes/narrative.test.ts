@@ -26,7 +26,7 @@ function expectProblem(res: Res, status: number, type: string): Record<string, u
   expect(res.statusCode).toBe(status);
   expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
   const body = res.json<Record<string, unknown>>();
-  expect(body).toMatchObject({ status, type: `https://tempo.dev/problems/${type}` });
+  expect(body).toMatchObject({ status, type: `urn:tempo:problem:${type}` });
   expect(body.requestId).toBe(res.headers['x-request-id']);
   return body;
 }
