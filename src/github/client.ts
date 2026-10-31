@@ -157,8 +157,13 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
   return {
     async getRepository(repo) {
       const data = await request(REPOSITORY_QUERY, { owner: repo.owner, name: repo.name }, label(repo));
-      const repository = data.repository as { nameWithOwner: string; defaultBranchRef: { name: string } | null } | null;
-      if (!repository) throw new RepoNotFoundError(label(repo));
+      const repository = data.repository as {
+        nameWithOwner: string;
+        isPrivate?: boolean;
+        defaultBranchRef: { name: string } | null;
+      } | null;
+      // Private repositories are reported exactly like missing ones, so the response never confirms they exist.
+      if (!repository || repository.isPrivate !== false) throw new RepoNotFoundError(label(repo));
       if (!repository.defaultBranchRef) throw new UpstreamError('The repository has no default branch');
       const [owner = '', name = ''] = repository.nameWithOwner.split('/');
       return { owner, name, defaultBranch: repository.defaultBranchRef.name };

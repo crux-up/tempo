@@ -96,6 +96,21 @@ describe('single-page app', () => {
     expect(missingAsset.headers['content-type']).toMatch(/^application\/problem\+json/);
   });
 
+  it('does not spend the API rate limit on static and page requests', async () => {
+    webRoot = mkdtempSync(join(tmpdir(), 'tempo-web-'));
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><title>Tempo</title>');
+    writeFileSync(join(webRoot, 'app.js'), 'console.log(1)');
+    h = await createHarness({ webRoot });
+
+    for (let i = 0; i < 130; i++) {
+      const url = i % 3 === 0 ? '/app.js' : i % 3 === 1 ? '/' : '/repos/fastify/fastify';
+      const res = await h.app.inject({ method: 'GET', url, headers: { accept: 'text/html' } });
+      expect(res.statusCode).toBe(200);
+    }
+    const api = await h.app.inject({ method: 'GET', url: '/api/v1/nope' });
+    expect(api.headers['x-ratelimit-remaining']).toBe('119');
+  });
+
   it('returns 404 problems at / when there is no built web app', async () => {
     h = await createHarness({ webRoot: join(tmpdir(), 'tempo-web-does-not-exist') });
     const res = await h.app.inject({ method: 'GET', url: '/', headers: { accept: 'text/html' } });

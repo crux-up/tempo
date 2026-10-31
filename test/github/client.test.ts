@@ -47,7 +47,12 @@ const json = (body: unknown, init: ResponseInit = {}) =>
 const rateLimit = { remaining: 4990, resetAt: '2026-03-10T13:00:00Z' };
 
 const repoOk = () =>
-  json({ data: { repository: { nameWithOwner: 'acme/widgets', defaultBranchRef: { name: 'main' } }, rateLimit } });
+  json({
+    data: {
+      repository: { nameWithOwner: 'acme/widgets', isPrivate: false, defaultBranchRef: { name: 'main' } },
+      rateLimit,
+    },
+  });
 
 const rawReview = (id: string, over: Record<string, unknown> = {}) => ({
   id,
@@ -90,7 +95,10 @@ describe('getRepository', () => {
   it('returns canonical owner, name and default branch', async () => {
     const h = harness([
       json({
-        data: { repository: { nameWithOwner: 'Acme/Widgets', defaultBranchRef: { name: 'trunk' } }, rateLimit },
+        data: {
+          repository: { nameWithOwner: 'Acme/Widgets', isPrivate: false, defaultBranchRef: { name: 'trunk' } },
+          rateLimit,
+        },
       }),
     ]);
     await expect(h.client.getRepository(repo)).resolves.toEqual({
@@ -131,9 +139,36 @@ describe('getRepository', () => {
     await expect(h.client.getRepository(repo)).rejects.toBeInstanceOf(RepoNotFoundError);
   });
 
+  it('asks GitHub whether the repository is private', async () => {
+    const h = harness([repoOk()]);
+    await h.client.getRepository(repo);
+    expect(h.calls[0]?.body.query).toContain('isPrivate');
+  });
+
+  it('refuses a private repository as not found, so its existence is not disclosed', async () => {
+    const h = harness([
+      json({
+        data: {
+          repository: { nameWithOwner: 'acme/secret', isPrivate: true, defaultBranchRef: { name: 'main' } },
+          rateLimit,
+        },
+      }),
+    ]);
+    await expect(h.client.getRepository(repo)).rejects.toBeInstanceOf(RepoNotFoundError);
+  });
+
+  it('fails closed when GitHub omits the visibility flag', async () => {
+    const h = harness([
+      json({ data: { repository: { nameWithOwner: 'acme/widgets', defaultBranchRef: { name: 'main' } }, rateLimit } }),
+    ]);
+    await expect(h.client.getRepository(repo)).rejects.toBeInstanceOf(RepoNotFoundError);
+  });
+
   it('maps a repository without a default branch to UpstreamError', async () => {
     const h = harness([
-      json({ data: { repository: { nameWithOwner: 'acme/widgets', defaultBranchRef: null }, rateLimit } }),
+      json({
+        data: { repository: { nameWithOwner: 'acme/widgets', isPrivate: false, defaultBranchRef: null }, rateLimit },
+      }),
     ]);
     await expect(h.client.getRepository(repo)).rejects.toBeInstanceOf(UpstreamError);
   });

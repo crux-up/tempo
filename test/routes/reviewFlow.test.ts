@@ -2,6 +2,7 @@ import { request } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { GitHubTokenRejectedError, RepoNotFoundError, UpstreamRateLimitedError } from '../../src/errors.js';
 import { ReviewFlowReportSchema } from '../../src/http/params.js';
+import type { PullRequestRow, ReviewRow } from '../../src/domain/types.js';
 import { createHarness, DATA_AS_OF, TOKEN, type Harness } from './harness.js';
 
 const PATH = '/api/v1/repos/fastify/fastify/review-flow';
@@ -174,6 +175,71 @@ describe('GET /api/v1/repos/:owner/:repo/review-flow', () => {
     const logged = h.logs.join('\n');
     expect(logged).toContain('database exploded');
     expect(logged).toContain('"stack"');
+  });
+
+  it('does not echo the message of a non-framework error that carries a 4xx status', async () => {
+    h.sync.failWith = Object.assign(new Error('upstream said: {"message":"Bad credentials","token":"zzz"}'), {
+      statusCode: 404,
+    });
+    const res = await get(`${PATH}?${WINDOW_QS}`);
+    expect(res.statusCode).toBe(404);
+    expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
+    expect(res.json()).toMatchObject({ status: 404, detail: 'Not Found' });
+    expect(res.body).not.toContain('Bad credentials');
+  });
+
+  it('measures metrics at the data snapshot, so rows stored after dataAsOf do not change the report', async () => {
+    // Window runs to now (AS_OF, 2026-03-20T00:00Z); dataAsOf is ten minutes earlier.
+    const url = `${PATH}?from=2026-03-02`;
+    const first = await get(url);
+    expect(first.statusCode).toBe(200);
+
+    const repoId = h.store.getRepo('fastify/fastify')!.id;
+    const late: PullRequestRow = {
+      id: 'PR_LATE',
+      number: 99,
+      author: 'erin',
+      authorIsBot: false,
+      createdAt: '2026-03-19T23:55:00Z',
+      updatedAt: '2026-03-19T23:55:00Z',
+      mergedAt: null,
+      closedAt: null,
+      additions: 1,
+      deletions: 1,
+    };
+    const lateReview: ReviewRow = {
+      id: 'R_LATE',
+      pullRequestId: 'PR5',
+      reviewer: 'bob',
+      reviewerIsBot: false,
+      state: 'APPROVED',
+      submittedAt: '2026-03-19T23:56:00Z',
+      commentCount: 0,
+    };
+    h.store.upsertPullRequests(repoId, [late], [lateReview]);
+    h.store.upsertCommits(repoId, [
+      {
+        sha: 'late',
+        authorLogin: 'erin',
+        authorName: 'Erin',
+        authorIsBot: false,
+        committedAt: '2026-03-19T23:57:00Z',
+        additions: 1,
+        deletions: 1,
+      },
+    ]);
+
+    const second = await get(url);
+    expect(second.json()).toEqual(first.json());
+    const team = second.json<{ team: { awaitingFirstReview: { medianAgeHours: number | null } } }>().team;
+    expect(team.awaitingFirstReview.medianAgeHours ?? 0).toBeGreaterThanOrEqual(0);
+  });
+
+  it('redacts secret-named fields at the top level of a log entry', async () => {
+    h.app.log.info({ token: TOKEN, githubToken: TOKEN, apiKey: TOKEN, anthropicApiKey: TOKEN }, 'secrets');
+    const line = h.logs.find((l) => l.includes('"secrets"'));
+    expect(line).toBeDefined();
+    expect(line).not.toContain(TOKEN);
   });
 
   it('assigns a fresh request id and ignores any inbound one', async () => {

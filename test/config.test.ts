@@ -9,6 +9,7 @@ describe('loadConfig', () => {
       githubToken: 'x',
       anthropicApiKey: null,
       anthropicModel: 'claude-opus-5-5',
+      host: '127.0.0.1',
       port: 3000,
       databasePath: './data/tempo.db',
       syncTtlMinutes: 15,
@@ -22,9 +23,11 @@ describe('loadConfig', () => {
     const config = loadConfig({
       GITHUB_TOKEN: 'x',
       ANTHROPIC_API_KEY: 'k',
+      HOST: '0.0.0.0',
       PORT: '8080',
       SYNC_TTL_MINUTES: '5',
     });
+    expect(config.host).toBe('0.0.0.0');
     expect(config.anthropicApiKey).toBe('k');
     expect(config.port).toBe(8080);
     expect(config.syncTtlMinutes).toBe(5);
@@ -34,6 +37,10 @@ describe('loadConfig', () => {
     const config = loadConfig({ GITHUB_TOKEN: 'x', ANTHROPIC_API_KEY: '', PORT: '' });
     expect(config.anthropicApiKey).toBeNull();
     expect(config.port).toBe(3000);
+  });
+
+  it('rejects a HOST that is not a bare host name or address', () => {
+    expect(() => loadConfig({ GITHUB_TOKEN: 'x', HOST: 'evil host;rm' })).toThrow(/HOST/);
   });
 
   it('throws ConfigError naming a missing GITHUB_TOKEN', () => {

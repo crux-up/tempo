@@ -7,14 +7,14 @@ import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import swagger from '@fastify/swagger';
 import Fastify from 'fastify';
-import type { FastifyInstance, FastifyLoggerOptions, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   jsonSchemaTransform,
   jsonSchemaTransformObject,
   serializerCompiler,
   validatorCompiler,
 } from 'fastify-type-provider-zod';
-import type { LoggerOptions } from 'pino';
+import { pino, type DestinationStream, type Logger, type LoggerOptions } from 'pino';
 import type { Config } from './config.js';
 import type { Store } from './db/store.js';
 import { TooManyRequestsError } from './errors.js';
@@ -23,39 +23,32 @@ import { healthRoutes } from './routes/health.js';
 import { reviewFlowRoutes } from './routes/reviewFlow.js';
 import type { ReviewFlowService } from './services/reviewFlowService.js';
 
-export type AppLoggerOptions = FastifyLoggerOptions & LoggerOptions;
-
 export type AppDeps = {
   config: Config;
   store: Store;
   reviewFlow: ReviewFlowService;
   /** No narrative service exists yet, so no narrative route is registered. */
   narrative: null;
-  /** `false` disables logging; otherwise these options are merged over the defaults (redaction always applies). */
-  logger?: false | AppLoggerOptions;
+  /** `false` disables logging. Defaults to `createLogger(config)`; pass the services' instance to share one logger. */
+  logger?: false | Logger;
   /** Built single-page app; served at `/` only when the directory exists. Defaults to `web/dist`. */
   webRoot?: string;
 };
 
-export const REDACT_PATHS = [
+const SECRET_KEYS = ['token', 'apiKey', 'githubToken', 'anthropicApiKey', 'GITHUB_TOKEN', 'ANTHROPIC_API_KEY'];
+const REDACT_PATHS = [
   'req.headers.authorization',
   'req.headers.cookie',
-  '*.token',
-  '*.apiKey',
-  '*.githubToken',
-  '*.anthropicApiKey',
-  'GITHUB_TOKEN',
-  'ANTHROPIC_API_KEY',
-  '*.GITHUB_TOKEN',
-  '*.ANTHROPIC_API_KEY',
+  ...SECRET_KEYS,
+  ...SECRET_KEYS.map((key) => `*.${key}`),
 ];
 
 const DEFAULT_WEB_ROOT = fileURLToPath(new URL('../web/dist', import.meta.url));
 const RATE_LIMIT_PER_MINUTE = 120;
 
-/** Logger options with redaction always applied; `server.ts` reuses them for the services' logger. */
-export function loggerOptions(config: Config, overrides?: AppLoggerOptions): AppLoggerOptions {
-  return {
+/** The one pino logger for the process: redaction and the request serializer always apply. */
+export function createLogger(config: Config, overrides: LoggerOptions = {}, destination?: DestinationStream): Logger {
+  const options: LoggerOptions = {
     level: config.logLevel,
     ...overrides,
     redact: { paths: REDACT_PATHS, censor: '[redacted]' },
@@ -64,6 +57,7 @@ export function loggerOptions(config: Config, overrides?: AppLoggerOptions): App
       req: (req: FastifyRequest) => ({ method: req.method, url: requestPath(req), remoteAddress: req.ip }),
     },
   };
+  return destination ? pino(options, destination) : pino(options);
 }
 
 type OpenApiDoc = ReturnType<typeof jsonSchemaTransformObject>;
@@ -83,8 +77,10 @@ const acceptsHtml = (request: FastifyRequest) => request.headers.accept?.include
 const isApiPath = (path: string) => path === '/api' || path.startsWith('/api/');
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
+  const loggerInstance: FastifyBaseLogger | undefined =
+    deps.logger === false ? undefined : (deps.logger ?? createLogger(deps.config));
   const app = Fastify({
-    logger: deps.logger === false ? false : loggerOptions(deps.config, deps.logger),
+    ...(loggerInstance ? { loggerInstance } : { logger: false }),
     genReqId: () => randomUUID(),
     requestIdHeader: false,
     frameworkErrors: sendFrameworkError,
@@ -117,6 +113,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     global: true,
     max: RATE_LIMIT_PER_MINUTE,
     timeWindow: '1 minute',
+    // Only the API is limited; static assets and the SPA shell are cheap and a page load fetches several.
+    allowList: (request) => !isApiPath(requestPath(request)),
     errorResponseBuilder: (_request, context) => new TooManyRequestsError(Math.max(1, Math.ceil(context.ttl / 1000))),
   });
 

@@ -1,7 +1,7 @@
 import { Writable } from 'node:stream';
 import type { Database } from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
-import { buildApp } from '../../src/app.js';
+import { buildApp, createLogger } from '../../src/app.js';
 import type { Config } from '../../src/config.js';
 import { openDatabase } from '../../src/db/database.js';
 import { Store } from '../../src/db/store.js';
@@ -16,6 +16,7 @@ export const testConfig: Config = {
   githubToken: TOKEN,
   anthropicApiKey: null,
   anthropicModel: 'claude-opus-5-5',
+  host: '127.0.0.1',
   port: 0,
   databasePath: ':memory:',
   syncTtlMinutes: 15,
@@ -78,7 +79,7 @@ export async function createHarness(opts: { webRoot?: string } = {}): Promise<Ha
     store,
     reviewFlow,
     narrative: null,
-    logger: { level: 'debug', stream },
+    logger: createLogger(testConfig, { level: 'debug' }, stream),
     webRoot: opts.webRoot,
   });
   return {

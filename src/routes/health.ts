@@ -4,12 +4,11 @@ import { NotReadyError } from '../errors.js';
 import { HealthSchema, ReadySchema } from '../http/params.js';
 import { jsonResponse, problemResponse } from '../http/problem.js';
 
-/** Probes are exempt from the client rate limit so orchestrators can poll freely. */
+/** Probes live outside /api, so the client rate limit never applies to them. */
 export const healthRoutes: FastifyPluginAsyncZod<{ store: Store }> = async (app, opts) => {
   app.get(
     '/healthz',
     {
-      config: { rateLimit: false },
       schema: {
         summary: 'Liveness probe',
         tags: ['health'],
@@ -22,7 +21,6 @@ export const healthRoutes: FastifyPluginAsyncZod<{ store: Store }> = async (app,
   app.get(
     '/readyz',
     {
-      config: { rateLimit: false },
       schema: {
         summary: 'Readiness probe: checks that the database answers',
         tags: ['health'],

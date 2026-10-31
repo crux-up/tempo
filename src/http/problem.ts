@@ -91,7 +91,7 @@ function fieldErrors(error: FastifyError & { validation: Array<{ instancePath: s
   }));
 }
 
-/** Maps every error to an RFC 9457 problem; only AppError and framework 4xx messages reach the client. */
+/** Maps every error to an RFC 9457 problem; only AppError and Fastify 4xx messages reach the client. */
 export function registerProblemHandlers(app: FastifyInstance): void {
   app.setErrorHandler((error: FastifyError, request, reply) => {
     if (error instanceof AppError) {
@@ -114,7 +114,8 @@ export function registerProblemHandlers(app: FastifyInstance): void {
         status,
         type: 'about:blank',
         title: STATUS_CODES[status] ?? 'Client error',
-        detail: error.message,
+        // Fastify's own messages are written for clients; anything else may carry upstream text.
+        detail: error.code?.startsWith('FST_') ? error.message : (STATUS_CODES[status] ?? 'Client error'),
       });
     }
     request.log.error({ err: error }, 'Unhandled error');

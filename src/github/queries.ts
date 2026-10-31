@@ -18,6 +18,7 @@ export const REPOSITORY_QUERY = `
 query Repository($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
     nameWithOwner
+    isPrivate
     defaultBranchRef { name }
   }
   ${RATE_LIMIT}

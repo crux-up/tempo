@@ -5,6 +5,7 @@ export type Config = {
   githubToken: string;
   anthropicApiKey: string | null;
   anthropicModel: string;
+  host: string;
   port: number;
   databasePath: string;
   syncTtlMinutes: number;
@@ -24,6 +25,13 @@ const envSchema = z.object({
   GITHUB_TOKEN: z.string().min(1),
   ANTHROPIC_API_KEY: z.preprocess(blankToUndefined, z.string().optional()),
   ANTHROPIC_MODEL: text('claude-opus-5-5'),
+  HOST: z.preprocess(
+    blankToUndefined,
+    z
+      .string()
+      .regex(/^[A-Za-z0-9.:-]+$/)
+      .default('127.0.0.1'),
+  ),
   PORT: z.preprocess(blankToUndefined, z.coerce.number().int().min(1).max(65535).default(3000)),
   DATABASE_PATH: text('./data/tempo.db'),
   SYNC_TTL_MINUTES: positiveInt(15),
@@ -50,6 +58,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     githubToken: e.GITHUB_TOKEN,
     anthropicApiKey: e.ANTHROPIC_API_KEY ?? null,
     anthropicModel: e.ANTHROPIC_MODEL,
+    host: e.HOST,
     port: e.PORT,
     databasePath: e.DATABASE_PATH,
     syncTtlMinutes: e.SYNC_TTL_MINUTES,
