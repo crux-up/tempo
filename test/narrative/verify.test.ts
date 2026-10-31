@@ -12,6 +12,7 @@ const sheetWith = (prsOpened: number, prsMerged: number): FactSheet => ({
     { id: 'team.prsMerged', label: 'PRs merged', value: prsMerged, unit: 'count' },
     { id: 'team.timeToFirstReview.median', label: 'Median hours to first review', value: 74, unit: 'hours', sampleSize: 2 },
     { id: 'person.bob.prsReviewed', label: 'bob: PRs reviewed', value: 2, unit: 'count' },
+    { id: 'team.timeToMerge.median', label: 'Median hours to merge', value: null, unit: 'hours', sampleSize: 0 },
   ],
   signals: [],
 });
@@ -85,6 +86,35 @@ describe('verifyNarrative', () => {
     expect(result.verification.droppedEvidenceIds).toEqual(['person.mallory.prsMerged', 'team.madeUp']);
   });
 
+  it('treats a fact with a null value as no evidence and records it', () => {
+    const result = verifyNarrative(
+      draft({
+        findings: [
+          { claim: 'missing only', evidence: ['team.timeToMerge.median'] },
+          { claim: 'mixed', evidence: ['team.timeToMerge.median', 'team.prsMerged'] },
+        ],
+        hypothesis: hypothesis({ evidence: ['team.timeToMerge.median'] }),
+      }),
+      sheet,
+    );
+    expect(result.findings).toEqual([
+      { claim: 'mixed', evidence: [{ factId: 'team.prsMerged', label: 'PRs merged', value: 12, unit: 'count' }] },
+    ]);
+    expect(result.hypothesis).toBeNull();
+    expect(result.verification.droppedFindings).toBe(1);
+    expect(result.verification.droppedEvidenceIds).toEqual(['team.timeToMerge.median']);
+  });
+
+  it('bounds the dropped ids it echoes back to 20 entries of at most 120 characters', () => {
+    const long = 'x'.repeat(500);
+    const unknown = [long, ...Array.from({ length: 30 }, (_, i) => `team.fake${i}`)];
+    const result = verifyNarrative(draft({ findings: [{ claim: 'c', evidence: unknown }] }), sheet);
+    const ids = result.verification.droppedEvidenceIds;
+    expect(ids).toHaveLength(20);
+    expect(ids[0]).toBe('x'.repeat(120));
+    for (const id of ids) expect(id.length).toBeLessThanOrEqual(120);
+  });
+
   it('lists each unknown id once across findings and hypothesis', () => {
     const result = verifyNarrative(
       draft({
@@ -149,7 +179,12 @@ describe('confidenceCap', () => {
   });
 
   it('applies the strictest cap when the sheet lacks PR counts', () => {
-    expect(confidenceCap({ ...sheet, facts: [] })?.max).toBe(0.3);
+    expect(confidenceCap({ ...sheet, facts: [] })).toEqual({
+      max: 0.3,
+      reason: 'PR counts are missing from the fact sheet',
+    });
+    const onlyOpened = { ...sheet, facts: sheet.facts.filter((f) => f.id !== 'team.prsMerged') };
+    expect(confidenceCap(onlyOpened)?.reason).toBe('PR counts are missing from the fact sheet');
   });
 });
 
@@ -164,6 +199,13 @@ describe('NarrativeDraftSchema', () => {
     const noHypothesis: Record<string, unknown> = { ...draft() };
     delete noHypothesis.hypothesis;
     expect(NarrativeDraftSchema.safeParse(noHypothesis).success).toBe(false);
+  });
+
+  it('describes fields to steer the model', () => {
+    const json = JSON.stringify(z.toJSONSchema(NarrativeDraftSchema));
+    expect(json).toContain('Fact ids copied exactly from the fact sheet');
+    expect(json).toContain('Number from 0 to 1');
+    expect(json).toContain('Plain-language claim; do not state numbers that are not in the cited facts');
   });
 
   it('converts to a plain JSON schema with no numeric or string constraints', () => {

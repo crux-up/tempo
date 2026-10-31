@@ -65,6 +65,23 @@ describe('buildFactSheet on the small repo fixture', () => {
     expect(fact(sheet, 'person.alice.commits').value).toBe(1);
   });
 
+  it('labels share and size facts with what they measure and their units', () => {
+    expect(fact(sheet, 'person.alice.codeShare').label).toBe("alice: share of the team's merged PRs (fraction 0-1)");
+    expect(fact(sheet, 'person.bob.reviewShare').label).toBe(
+      'bob: share of PR reviews, counted once per reviewer per PR (fraction 0-1)',
+    );
+    expect(fact(sheet, 'person.alice.linesChanged').label).toBe('alice: lines added plus deleted in merged PRs');
+    expect(fact(sheet, 'team.reviewConcentration.topReviewerShare').label).toBe(
+      "Top reviewer's share of PR reviews, counted once per reviewer per PR (fraction 0-1)",
+    );
+    expect(fact(sheet, 'team.reviewConcentration.reviewersFor50Pct').label).toBe(
+      'Fewest reviewers covering half of PR reviews (counted per reviewer per PR)',
+    );
+    const shareFacts = sheet.facts.filter((f) => f.unit === 'share');
+    expect(shareFacts.length).toBeGreaterThan(0);
+    for (const f of shareFacts) expect(f.label.endsWith('(fraction 0-1)')).toBe(true);
+  });
+
   it('emits week facts with the first-review sample size', () => {
     expect(fact(sheet, 'week.2026-W10.prsOpened').value).toBe(2);
     expect(fact(sheet, 'week.2026-W11.reviewsSubmitted').value).toBe(4);

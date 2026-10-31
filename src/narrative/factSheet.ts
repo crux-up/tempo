@@ -23,14 +23,14 @@ type PersonField = Exclude<keyof PersonStats, 'login' | 'unlinked'>;
 const PERSON_FIELDS: { field: PersonField; label: string; unit: Fact['unit'] }[] = [
   { field: 'prsOpened', label: 'PRs opened', unit: 'count' },
   { field: 'prsMerged', label: 'PRs merged', unit: 'count' },
-  { field: 'linesChanged', label: 'lines changed in merged PRs', unit: 'count' },
+  { field: 'linesChanged', label: 'lines added plus deleted in merged PRs', unit: 'count' },
   { field: 'reviewsSubmitted', label: 'reviews submitted', unit: 'count' },
   { field: 'prsReviewed', label: 'PRs reviewed', unit: 'count' },
   { field: 'approvals', label: 'approvals', unit: 'count' },
   { field: 'changesRequested', label: 'changes requested', unit: 'count' },
   { field: 'reviewComments', label: 'review comments', unit: 'count' },
-  { field: 'reviewShare', label: 'share of PRs reviewed', unit: 'share' },
-  { field: 'codeShare', label: 'share of merged lines changed', unit: 'share' },
+  { field: 'reviewShare', label: 'share of PR reviews, counted once per reviewer per PR (fraction 0-1)', unit: 'share' },
+  { field: 'codeShare', label: "share of the team's merged PRs (fraction 0-1)", unit: 'share' },
   { field: 'commits', label: 'commits', unit: 'count' },
 ];
 
@@ -110,7 +110,7 @@ function teamFacts(team: TeamStats, people: PersonStats[]): Fact[] {
     },
     {
       id: 'team.mergedWithoutReview.share',
-      label: 'Share of merged PRs merged without a review',
+      label: 'Share of merged PRs merged without a review (fraction 0-1)',
       value: team.mergedWithoutReview.share,
       unit: 'share',
     },
@@ -122,13 +122,13 @@ function teamFacts(team: TeamStats, people: PersonStats[]): Fact[] {
     },
     {
       id: ids.topReviewerShare,
-      label: "Top reviewer's share of PRs reviewed",
+      label: "Top reviewer's share of PR reviews, counted once per reviewer per PR (fraction 0-1)",
       value: concentration.topReviewerShare,
       unit: 'share',
     },
     {
       id: 'team.reviewConcentration.reviewersFor50Pct',
-      label: 'Fewest reviewers covering half of PRs reviewed',
+      label: 'Fewest reviewers covering half of PR reviews (counted per reviewer per PR)',
       value: concentration.reviewersFor50Pct,
       unit: 'count',
     },
