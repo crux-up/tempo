@@ -9,6 +9,8 @@ export type RepoRecord = {
   defaultBranch: string;
   syncedFrom: string | null;
   syncedAt: string | null;
+  /** GitHub cursor after the last PR page an unfinished backfill stored; the next backfill resumes there. */
+  backfillCursor: string | null;
 };
 
 export type StoredNarrative = { body: unknown; model: string; promptVersion: string; createdAt: string };
@@ -21,6 +23,7 @@ type RepoDbRow = {
   default_branch: string;
   synced_from: string | null;
   synced_at: string | null;
+  backfill_cursor: string | null;
 };
 
 type PullRequestDbRow = {
@@ -75,6 +78,7 @@ const toRepo = (r: RepoDbRow): RepoRecord => ({
   defaultBranch: r.default_branch,
   syncedFrom: r.synced_from,
   syncedAt: r.synced_at,
+  backfillCursor: r.backfill_cursor,
 });
 
 const toPullRequest = (r: PullRequestDbRow): PullRequestRow => ({
@@ -135,8 +139,8 @@ export class Store {
        RETURNING *`,
     );
 
-    this.updateSync = db.prepare<[string, string, number]>(
-      'UPDATE repos SET synced_from = ?, synced_at = ? WHERE id = ?',
+    this.updateSync = db.prepare<[string, string, string | null, number]>(
+      'UPDATE repos SET synced_from = ?, synced_at = ?, backfill_cursor = ? WHERE id = ?',
     );
 
     this.insertPullRequest = db.prepare(
@@ -273,8 +277,8 @@ export class Store {
     return toRepo(row);
   }
 
-  markSynced(repoId: number, p: { syncedFrom: string; syncedAt: string }): void {
-    this.updateSync.run(iso(p.syncedFrom), iso(p.syncedAt), repoId);
+  markSynced(repoId: number, p: { syncedFrom: string; syncedAt: string; backfillCursor: string | null }): void {
+    this.updateSync.run(iso(p.syncedFrom), iso(p.syncedAt), p.backfillCursor, repoId);
   }
 
   upsertPullRequests(repoId: number, prs: PullRequestRow[], reviews: ReviewRow[]): void {

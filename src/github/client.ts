@@ -25,10 +25,19 @@ const DEFAULT_RETRY_AFTER_SECONDS = 60;
 
 export interface GitHubSource {
   getRepository(repo: RepoRef): Promise<{ owner: string; name: string; defaultBranch: string }>;
-  /** Pages PRs ordered by UPDATED_AT DESC; yields each page and the caller stops iterating. */
+  /**
+   * Pages PRs ordered by UPDATED_AT DESC; yields each page and the caller stops iterating. `after` resumes after a
+   * cursor from an earlier page. `endCursor` resumes after the page it comes with and is null on the last page.
+   */
   pullRequestPages(
     repo: RepoRef,
-  ): AsyncIterable<{ pullRequests: PullRequestRow[]; reviews: ReviewRow[]; oldestUpdatedAt: string | null }>;
+    opts?: { after?: string },
+  ): AsyncIterable<{
+    pullRequests: PullRequestRow[];
+    reviews: ReviewRow[];
+    oldestUpdatedAt: string | null;
+    endCursor: string | null;
+  }>;
   commitPages(repo: RepoRef, branch: string, since: string, until: string): AsyncIterable<CommitRow[]>;
 }
 
@@ -155,8 +164,8 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
       return { owner, name, defaultBranch: repository.defaultBranchRef.name };
     },
 
-    async *pullRequestPages(repo) {
-      let cursor: string | null = null;
+    async *pullRequestPages(repo, opts) {
+      let cursor: string | null = opts?.after ?? null;
       for (;;) {
         const data = await request(PULL_REQUESTS_QUERY, { owner: repo.owner, name: repo.name, cursor }, label(repo));
         const repository = data.repository as { pullRequests: Connection<RawPullRequest> } | null;
@@ -169,10 +178,11 @@ export function createGitHubClient(opts: GitHubClientOptions): GitHubSource {
           pullRequests.push(mapPullRequest(node));
           reviews.push(...mapReviews(node.id, await allReviews(node.id, node.reviews, label(repo))));
         }
-        yield { pullRequests, reviews, oldestUpdatedAt: oldestUpdatedAt(pullRequests) };
+        const endCursor = pageInfo.hasNextPage ? pageInfo.endCursor : null;
+        yield { pullRequests, reviews, oldestUpdatedAt: oldestUpdatedAt(pullRequests), endCursor };
 
-        if (!pageInfo.hasNextPage) return;
-        cursor = pageInfo.endCursor;
+        if (endCursor === null) return;
+        cursor = endCursor;
       }
     },
 

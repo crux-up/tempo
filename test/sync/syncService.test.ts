@@ -32,6 +32,7 @@ const commit = (sha: string, committedAt: string): CommitRow => ({
 });
 
 type PrPage = { pullRequests: PullRequestRow[]; reviews: ReviewRow[]; oldestUpdatedAt: string | null };
+type YieldedPage = PrPage & { endCursor: string | null };
 
 const page = (...prs: PullRequestRow[]): PrPage => ({
   pullRequests: prs,
@@ -39,14 +40,20 @@ const page = (...prs: PullRequestRow[]): PrPage => ({
   oldestUpdatedAt: prs.length ? prs.map((p) => p.updatedAt).sort()[0]! : null,
 });
 
-/** Lazy fake: counts the pages actually pulled, so tests can assert how far the service paged. */
+/**
+ * Lazy fake: counts the pages actually pulled, so tests can assert how far the service paged. PR page `i` carries
+ * cursor `p{i+1}` (null on the last page) and `after: 'pN'` resumes at page N. Commit pages are filtered to
+ * `[since, until)` like the real history query, and an empty range yields one empty page.
+ */
 class FakeGitHub implements GitHubSource {
   prPages: PrPage[] = [];
   commitPagesData: CommitRow[][] = [];
   failPrPageAt: number | null = null;
+  failCommits = false;
   onPage: () => void = () => {};
   repoCalls: RepoRef[] = [];
   prCalls = 0;
+  prAfters: Array<string | undefined> = [];
   prPagesPulled = 0;
   commitCalls: Array<{ branch: string; since: string; until: string }> = [];
   commitPagesPulled = 0;
@@ -57,19 +64,24 @@ class FakeGitHub implements GitHubSource {
     return { owner: 'fastify', name: 'fastify', defaultBranch: 'main' };
   }
 
-  async *pullRequestPages(): AsyncIterable<PrPage> {
+  async *pullRequestPages(_repo: RepoRef, opts?: { after?: string }): AsyncIterable<YieldedPage> {
     this.prCalls++;
-    for (let i = 0; i < this.prPages.length; i++) {
+    this.prAfters.push(opts?.after);
+    const start = opts?.after === undefined ? 0 : Number(opts.after.slice(1));
+    for (let i = start; i < this.prPages.length; i++) {
       if (this.failPrPageAt === i) throw new UpstreamError('boom');
       this.prPagesPulled++;
       this.onPage();
-      yield this.prPages[i]!;
+      yield { ...this.prPages[i]!, endCursor: i + 1 < this.prPages.length ? `p${i + 1}` : null };
     }
   }
 
   async *commitPages(_repo: RepoRef, branch: string, since: string, until: string): AsyncIterable<CommitRow[]> {
     this.commitCalls.push({ branch, since, until });
-    for (const p of this.commitPagesData) {
+    if (this.failCommits) throw new UpstreamError('commits boom');
+    const inRange = (c: CommitRow) => c.committedAt >= since && c.committedAt < until;
+    const pages = this.commitPagesData.map((p) => p.filter(inRange)).filter((p) => p.length > 0);
+    for (const p of pages.length ? pages : [[]]) {
       this.commitPagesPulled++;
       this.onPage();
       yield p;
@@ -84,6 +96,7 @@ class FakeGitHub implements GitHubSource {
 const silent: Logger = { debug: () => {}, warn: () => {} };
 const T0 = new Date('2026-03-31T12:00:00.000Z');
 const MARCH = { from: new Date('2026-03-01T00:00:00.000Z'), to: T0 };
+const FROM_FEB_15 = { from: new Date('2026-02-15T00:00:00.000Z'), to: T0 };
 const REPO = { owner: 'fastify', name: 'fastify' };
 
 describe('SyncService', () => {
@@ -130,6 +143,7 @@ describe('SyncService', () => {
       key: 'fastify/fastify',
       syncedFrom: '2026-03-01T00:00:00.000Z',
       syncedAt: '2026-03-31T12:00:00.000Z',
+      backfillCursor: null,
     });
     expect(result.dataAsOf).toBe('2026-03-31T12:00:00.000Z');
     expect(result.coverage).toEqual({
@@ -180,9 +194,8 @@ describe('SyncService', () => {
     await service().ensureSynced(REPO, MARCH);
     clock = new Date(T0.getTime() + 60_000);
     github.prPagesPulled = 0;
-    const wider = { from: new Date('2026-02-15T00:00:00.000Z'), to: T0 };
 
-    const result = await service().ensureSynced(REPO, wider);
+    const result = await service().ensureSynced(REPO, FROM_FEB_15);
 
     expect(github.prPagesPulled).toBe(3);
     expect(github.commitCalls[1]).toEqual({
@@ -199,16 +212,19 @@ describe('SyncService', () => {
     });
   });
 
-  it('stops at maxPages and reports partial coverage from the oldest PR reached', async () => {
+  it('stops at maxPages and reports partial coverage from one second above the oldest PR reached', async () => {
     const result = await service({ maxPages: 1 }).ensureSynced(REPO, MARCH);
 
     expect(github.prPagesPulled).toBe(1);
-    expect(github.commitCalls[0]?.since).toBe('2026-03-20T00:00:00.000Z');
-    expect(result.repo.syncedFrom).toBe('2026-03-20T00:00:00.000Z');
-    expect(result.repo.syncedAt).toBe('2026-03-31T12:00:00.000Z');
+    expect(github.commitCalls[0]?.since).toBe('2026-03-20T00:00:01.000Z');
+    expect(result.repo).toMatchObject({
+      syncedFrom: '2026-03-20T00:00:01.000Z',
+      syncedAt: '2026-03-31T12:00:00.000Z',
+      backfillCursor: 'p1',
+    });
     expect(result.coverage).toEqual({
       partial: true,
-      from: '2026-03-20T00:00:00.000Z',
+      from: '2026-03-20T00:00:01.000Z',
       to: '2026-03-31T12:00:00.000Z',
     });
   });
@@ -225,7 +241,7 @@ describe('SyncService', () => {
     expect(result.repo.syncedAt).toBe('2026-03-31T12:00:00.000Z');
   });
 
-  it('limits syncedFrom to the oldest commit reached when the budget stops the commit pass', async () => {
+  it('limits syncedFrom to one second above the oldest commit reached when the budget stops the commit pass', async () => {
     github.commitPagesData = [
       [commit('c3', '2026-03-28T00:00:00.000Z')],
       [commit('c2', '2026-03-25T00:00:00.000Z')],
@@ -236,8 +252,62 @@ describe('SyncService', () => {
 
     expect(github.prPagesPulled).toBe(2);
     expect(github.commitPagesPulled).toBe(1);
-    expect(result.repo.syncedFrom).toBe('2026-03-28T00:00:00.000Z');
-    expect(result.coverage).toMatchObject({ partial: true, from: '2026-03-28T00:00:00.000Z' });
+    expect(result.repo.syncedFrom).toBe('2026-03-28T00:00:01.000Z');
+    expect(result.coverage).toMatchObject({ partial: true, from: '2026-03-28T00:00:01.000Z' });
+  });
+
+  it('resumes a budget-limited backfill from the stored cursor until coverage is complete', async () => {
+    github.commitPagesData = [];
+    const sync = service({ maxPages: 1 });
+
+    const first = await sync.ensureSynced(REPO, FROM_FEB_15);
+    const second = await sync.ensureSynced(REPO, FROM_FEB_15);
+    const third = await sync.ensureSynced(REPO, FROM_FEB_15);
+
+    expect(github.prAfters).toEqual([undefined, 'p1', 'p2']);
+    expect(github.prPagesPulled).toBe(3);
+    expect(first.coverage).toMatchObject({ partial: true, from: '2026-03-20T00:00:01.000Z' });
+    expect(second.coverage).toMatchObject({ partial: true, from: '2026-02-25T00:00:01.000Z' });
+    expect(second.repo.backfillCursor).toBe('p2');
+    expect(github.commitCalls[1]).toMatchObject({
+      since: '2026-02-25T00:00:01.000Z',
+      until: '2026-03-20T00:00:01.000Z',
+    });
+    expect(third.coverage).toEqual({ partial: false, from: '2026-02-15T00:00:00.000Z', to: T0.toISOString() });
+    expect(third.repo).toMatchObject({ syncedAt: T0.toISOString(), backfillCursor: null });
+    const stored = store.loadWindowData(third.repo.id, FROM_FEB_15, T0).pullRequests.map((p) => p.number);
+    expect(stored).toEqual([5, 4, 3, 2, 1]);
+  });
+
+  it('refreshes and saves a cursor when a combined backfill and refresh stops between syncedFrom and syncedAt', async () => {
+    await service().ensureSynced(REPO, MARCH);
+    clock = new Date(T0.getTime() + 20 * 60_000);
+    github.prPages = [
+      page(pr(7, '2026-03-31T12:10:00.000Z'), pr(1, '2026-03-30T00:00:00.000Z')),
+      page(pr(2, '2026-03-20T00:00:00.000Z'), pr(3, '2026-03-10T00:00:00.000Z')),
+      page(pr(4, '2026-02-25T00:00:00.000Z'), pr(5, '2026-02-20T00:00:00.000Z')),
+      page(pr(6, '2026-02-10T00:00:00.000Z')),
+    ];
+    const wider = { from: FROM_FEB_15.from, to: clock };
+
+    const result = await service({ maxPages: 2 }).ensureSynced(REPO, wider);
+
+    expect(github.prAfters).toEqual([undefined, undefined]);
+    expect(result.repo).toMatchObject({
+      syncedAt: '2026-03-31T12:20:00.000Z',
+      syncedFrom: '2026-03-01T00:00:00.000Z',
+      backfillCursor: 'p2',
+    });
+    expect(result.coverage).toMatchObject({ partial: true, from: '2026-03-01T00:00:00.000Z' });
+    expect(github.commitCalls.slice(1)).toEqual([
+      { branch: 'main', since: '2026-03-31T12:00:00.000Z', until: '2026-03-31T12:20:00.000Z' },
+    ]);
+
+    const next = await service({ maxPages: 2 }).ensureSynced(REPO, wider);
+
+    expect(github.prAfters[2]).toBe('p2');
+    expect(next.coverage).toMatchObject({ partial: false, from: '2026-02-15T00:00:00.000Z' });
+    expect(next.repo.backfillCursor).toBeNull();
   });
 
   it('keeps syncedAt when a refresh hits the budget before reaching it', async () => {
@@ -253,7 +323,21 @@ describe('SyncService', () => {
 
     expect(result.repo.syncedAt).toBe('2026-03-31T12:00:00.000Z');
     expect(result.repo.syncedFrom).toBe('2026-03-01T00:00:00.000Z');
-    expect(store.loadWindowData(result.repo.id, { from: MARCH.from, to: clock }, clock).pullRequests.map((p) => p.number)).toContain(8);
+    expect(result.repo.backfillCursor).toBeNull();
+    const stored = store.loadWindowData(result.repo.id, { from: MARCH.from, to: clock }, clock);
+    expect(stored.pullRequests.map((p) => p.number)).toContain(8);
+  });
+
+  it('clamps coverage.from to window.to when coverage stops above the window', async () => {
+    const february = { from: new Date('2026-02-01T00:00:00.000Z'), to: new Date('2026-02-10T00:00:00.000Z') };
+
+    const result = await service({ maxPages: 1 }).ensureSynced(REPO, february);
+
+    expect(result.coverage).toEqual({
+      partial: true,
+      from: '2026-02-10T00:00:00.000Z',
+      to: '2026-02-10T00:00:00.000Z',
+    });
   });
 
   it('shares one in-flight sync between concurrent calls for the same repo', async () => {
@@ -292,5 +376,15 @@ describe('SyncService', () => {
     const retry = await sync.ensureSynced(REPO, MARCH);
     expect(github.prCalls).toBe(2);
     expect(retry.repo.syncedAt).toBe('2026-03-31T12:00:00.000Z');
+  });
+
+  it('leaves the markers unchanged when the commit pass fails', async () => {
+    github.failCommits = true;
+
+    await expect(service().ensureSynced(REPO, MARCH)).rejects.toThrow('commits boom');
+
+    const repo = store.getRepo('fastify/fastify')!;
+    expect(repo).toMatchObject({ syncedFrom: null, syncedAt: null, backfillCursor: null });
+    expect(store.loadWindowData(repo.id, MARCH, T0).pullRequests).toHaveLength(3);
   });
 });

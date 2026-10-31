@@ -155,6 +155,7 @@ describe('pullRequestPages', () => {
     const pages = await collect(h.client.pullRequestPages(repo));
     expect(pages.map((p) => p.pullRequests.map((r) => r.id))).toEqual([['PR_1', 'PR_2'], ['PR_3']]);
     expect(pages.map((p) => p.oldestUpdatedAt)).toEqual(['2026-03-08T09:00:00Z', '2026-03-05T09:00:00Z']);
+    expect(pages.map((p) => p.endCursor)).toEqual(['c1', null]);
     expect(h.calls).toHaveLength(2);
     expect(h.calls[0]?.body.variables.cursor).toBeNull();
     expect(h.calls[1]?.body.variables.cursor).toBe('c1');
@@ -172,7 +173,15 @@ describe('pullRequestPages', () => {
   it('yields oldestUpdatedAt null for an empty page', async () => {
     const h = harness([prPage([], false, null)]);
     const pages = await collect(h.client.pullRequestPages(repo));
-    expect(pages).toEqual([{ pullRequests: [], reviews: [], oldestUpdatedAt: null }]);
+    expect(pages).toEqual([{ pullRequests: [], reviews: [], oldestUpdatedAt: null, endCursor: null }]);
+  });
+
+  it('starts after the given cursor when resuming', async () => {
+    const h = harness([prPage([rawPr('PR_9')], true, 'c10'), prPage([rawPr('PR_8')], false, null)]);
+    const pages = await collect(h.client.pullRequestPages(repo, { after: 'c9' }));
+    expect(pages.map((p) => p.endCursor)).toEqual(['c10', null]);
+    expect(h.calls[0]?.body.variables.cursor).toBe('c9');
+    expect(h.calls[1]?.body.variables.cursor).toBe('c10');
   });
 
   it('maps repository null to RepoNotFoundError', async () => {

@@ -1,7 +1,7 @@
 import type { Database } from 'better-sqlite3';
 
 /** Ordered schema steps. `PRAGMA user_version` records how many have run; never edit a shipped step. */
-const MIGRATIONS: readonly string[] = [
+export const MIGRATIONS: readonly string[] = [
   `
   CREATE TABLE repos (
     id             INTEGER PRIMARY KEY,
@@ -62,6 +62,9 @@ const MIGRATIONS: readonly string[] = [
     prompt_version TEXT NOT NULL,
     created_at     TEXT NOT NULL
   );
+  `,
+  `
+  ALTER TABLE repos ADD COLUMN backfill_cursor TEXT;
   `,
 ];
 

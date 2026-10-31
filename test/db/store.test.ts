@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Database } from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import BetterSqlite3 from 'better-sqlite3';
 import { openDatabase } from '../../src/db/database.js';
+import { MIGRATIONS } from '../../src/db/migrations.js';
 import { Store } from '../../src/db/store.js';
 import type { CommitRow, PullRequestRow, ReviewRow } from '../../src/domain/types.js';
 
@@ -65,11 +67,23 @@ describe('Store', () => {
     expect(again.id).toBe(repoId);
     expect(again.defaultBranch).toBe('trunk');
     expect(again.syncedAt).toBeNull();
-    store.markSynced(repoId, { syncedFrom: '2026-01-01T00:00:00.000Z', syncedAt: '2026-04-01T00:00:00.000Z' });
+    expect(again.backfillCursor).toBeNull();
+    store.markSynced(repoId, {
+      syncedFrom: '2026-01-01T00:00:00.000Z',
+      syncedAt: '2026-04-01T00:00:00.000Z',
+      backfillCursor: 'Y3Vyc29yOjE=',
+    });
     expect(store.getRepo('acme/api')).toMatchObject({
       syncedFrom: '2026-01-01T00:00:00.000Z',
       syncedAt: '2026-04-01T00:00:00.000Z',
+      backfillCursor: 'Y3Vyc29yOjE=',
     });
+    store.markSynced(repoId, {
+      syncedFrom: '2026-01-01T00:00:00.000Z',
+      syncedAt: '2026-04-01T00:00:00.000Z',
+      backfillCursor: null,
+    });
+    expect(store.getRepo('acme/api')?.backfillCursor).toBeNull();
   });
 
   it('keeps one row per pull request and stores the newer values', () => {
@@ -209,6 +223,27 @@ describe('openDatabase', () => {
     expect(second.pragma('user_version', { simple: true })).toBe(version);
     expect(new Store(second).getRepo('acme/api')).not.toBeNull();
     second.close();
+  });
+
+  it('applies migration 2 to an existing version 1 database and keeps its rows', () => {
+    const path = join(dir, 'v1.db');
+    const v1 = new BetterSqlite3(path);
+    v1.exec(MIGRATIONS[0] as string);
+    v1.pragma('user_version = 1');
+    v1.prepare(
+      `INSERT INTO repos (key, owner, name, default_branch, synced_from, synced_at)
+       VALUES ('acme/api', 'acme', 'api', 'main', '2026-01-01T00:00:00.000Z', '2026-04-01T00:00:00.000Z')`,
+    ).run();
+    v1.close();
+
+    const db = openDatabase(path);
+    expect(db.pragma('user_version', { simple: true })).toBe(2);
+    expect(new Store(db).getRepo('acme/api')).toMatchObject({
+      syncedFrom: '2026-01-01T00:00:00.000Z',
+      syncedAt: '2026-04-01T00:00:00.000Z',
+      backfillCursor: null,
+    });
+    db.close();
   });
 
   it('supports in-memory databases', () => {
