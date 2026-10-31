@@ -54,12 +54,15 @@ const TRUNCATED = 'The model ran out of output tokens before finishing the narra
 const INVALID_OUTPUT = 'The model returned output that does not match the narrative schema';
 const TIMED_OUT = 'The model did not answer in time';
 
+/** Pinned, so an ANTHROPIC_BASE_URL in the environment cannot send the key and fact sheets to another host. */
+const ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
+
 /**
  * Time limits are enforced by the abort signal passed with each call, so a timed-out attempt is never retried by
  * the SDK. The SDK's own timeout is only a backstop at the request deadline.
  */
 export function anthropicClientOptions(apiKey: string): ClientOptions {
-  return { apiKey, maxRetries: SDK_MAX_RETRIES, timeout: DEFAULT_LIMITS.deadlineMs };
+  return { apiKey, baseURL: ANTHROPIC_BASE_URL, maxRetries: SDK_MAX_RETRIES, timeout: DEFAULT_LIMITS.deadlineMs };
 }
 
 function buildRequest(model: string, sheet: FactSheet): MessageParams {

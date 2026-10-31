@@ -128,7 +128,12 @@ describe('createAnthropicNarrativeModel', () => {
   });
 
   it('configures the SDK client with one retry and a timeout no longer than the request deadline', () => {
-    expect(anthropicClientOptions(API_KEY)).toEqual({ apiKey: API_KEY, maxRetries: 1, timeout: 150_000 });
+    expect(anthropicClientOptions(API_KEY)).toEqual({
+      apiKey: API_KEY,
+      baseURL: 'https://api.anthropic.com',
+      maxRetries: 1,
+      timeout: 150_000,
+    });
   });
 
   it('returns the parsed draft, the model that served it and token usage', async () => {
