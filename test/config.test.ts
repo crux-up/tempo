@@ -16,8 +16,22 @@ describe('loadConfig', () => {
       syncMaxPages: 40,
       syncMaxSeconds: 25,
       narrativeMaxPerHour: 30,
+      allowedHosts: ['localhost', '127.0.0.1'],
+      trustProxy: false,
       logLevel: 'info',
     });
+  });
+
+  it('reads ALLOWED_HOSTS as a lowercased comma-separated list and rejects malformed entries', () => {
+    const config = loadConfig({ GITHUB_TOKEN: 'x', ALLOWED_HOSTS: ' Tempo.example , 10.0.0.5,[::1] ' });
+    expect(config.allowedHosts).toEqual(['tempo.example', '10.0.0.5', '::1']);
+    expect(() => loadConfig({ GITHUB_TOKEN: 'x', ALLOWED_HOSTS: 'ok.example,bad host' })).toThrow(/ALLOWED_HOSTS/);
+    expect(() => loadConfig({ GITHUB_TOKEN: 'x', ALLOWED_HOSTS: ',' })).toThrow(/ALLOWED_HOSTS/);
+  });
+
+  it('reads TRUST_PROXY as true or false only', () => {
+    expect(loadConfig({ GITHUB_TOKEN: 'x', TRUST_PROXY: 'true' }).trustProxy).toBe(true);
+    expect(() => loadConfig({ GITHUB_TOKEN: 'x', TRUST_PROXY: 'yes' })).toThrow(/TRUST_PROXY/);
   });
 
   it('reads NARRATIVE_MAX_PER_HOUR as a positive integer', () => {

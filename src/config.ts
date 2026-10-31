@@ -14,6 +14,10 @@ export type Config = {
   syncMaxSeconds: number;
   /** New (uncached) narratives allowed per rolling hour, across all clients. */
   narrativeMaxPerHour: number;
+  /** Host names (any port) the server answers to; anything else is refused, which stops DNS rebinding. */
+  allowedHosts: string[];
+  /** Trust X-Forwarded-* headers: set only behind a reverse proxy that writes them. */
+  trustProxy: boolean;
   logLevel: string;
 };
 
@@ -25,6 +29,19 @@ const blankToUndefined = (value: unknown) => (value === '' ? undefined : value);
 const text = (fallback: string) => z.preprocess(blankToUndefined, z.string().default(fallback));
 const positiveInt = (fallback: number) =>
   z.preprocess(blankToUndefined, z.coerce.number().int().positive().default(fallback));
+
+const HOST_NAME = /^[a-z0-9.:-]+$/;
+
+/** Comma-separated host names, lowercased, with IPv6 brackets dropped. */
+const hostList = (fallback: string) =>
+  z.preprocess(
+    blankToUndefined,
+    z
+      .string()
+      .default(fallback)
+      .transform((list) => list.split(',').map((host) => host.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1')))
+      .pipe(z.array(z.string().regex(HOST_NAME)).min(1)),
+  );
 
 const envSchema = z.object({
   GITHUB_TOKEN: z.string().min(1),
@@ -43,6 +60,8 @@ const envSchema = z.object({
   SYNC_MAX_PAGES: positiveInt(40),
   SYNC_MAX_SECONDS: positiveInt(25),
   NARRATIVE_MAX_PER_HOUR: positiveInt(30),
+  ALLOWED_HOSTS: hostList('localhost,127.0.0.1'),
+  TRUST_PROXY: z.preprocess(blankToUndefined, z.enum(['true', 'false']).default('false')),
   LOG_LEVEL: z.preprocess(
     blankToUndefined,
     z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
@@ -71,6 +90,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     syncMaxPages: e.SYNC_MAX_PAGES,
     syncMaxSeconds: e.SYNC_MAX_SECONDS,
     narrativeMaxPerHour: e.NARRATIVE_MAX_PER_HOUR,
+    allowedHosts: e.ALLOWED_HOSTS,
+    trustProxy: e.TRUST_PROXY === 'true',
     logLevel: e.LOG_LEVEL,
   };
 }

@@ -120,4 +120,10 @@ describe('single-page app', () => {
     expect(res.statusCode).toBe(404);
     expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
   });
+
+  it('warns at startup when the dashboard is not built', async () => {
+    h = await createHarness({ webRoot: join(tmpdir(), 'tempo-web-does-not-exist') });
+    const warning = h.logs.map((line) => JSON.parse(line) as { level: number; msg: string }).find((l) => l.level === 40);
+    expect(warning?.msg).toBe('dashboard not built; run npm run build');
+  });
 });

@@ -1,0 +1,74 @@
+import { afterEach, describe, expect, it } from 'vitest';
+import { createHarness, type Harness } from './harness.js';
+
+const API = '/api/v1/repos/fastify/fastify/review-flow?from=2026-03-02&to=2026-03-16';
+
+let h: Harness | undefined;
+
+afterEach(async () => {
+  await h?.close();
+  h = undefined;
+});
+
+const get = (url: string, headers: Record<string, string> = {}) => h!.app.inject({ method: 'GET', url, headers });
+
+function expectForbidden(res: Awaited<ReturnType<typeof get>>): void {
+  expect(res.statusCode).toBe(403);
+  expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
+  expect(res.json()).toMatchObject({ status: 403, type: 'urn:tempo:problem:forbidden' });
+}
+
+describe('cross-site and DNS-rebinding guard', () => {
+  it('accepts localhost and 127.0.0.1 on any port, in any case', async () => {
+    h = await createHarness();
+    for (const host of ['localhost:3000', '127.0.0.1:8080', 'LOCALHOST', '127.0.0.1']) {
+      expect((await get(API, { host })).statusCode).toBe(200);
+    }
+  });
+
+  it('refuses a Host header that is not allowed, on the API and on the probes', async () => {
+    h = await createHarness();
+    expectForbidden(await get(API, { host: 'evil.example:3000' }));
+    expectForbidden(await get('/healthz', { host: 'evil.example' }));
+    expect(h.sync.calls).toHaveLength(0);
+  });
+
+  it('reads the allowed hosts from ALLOWED_HOSTS', async () => {
+    h = await createHarness({ config: { allowedHosts: ['tempo.internal'] } });
+    expect((await get(API, { host: 'tempo.internal:8443' })).statusCode).toBe(200);
+    expectForbidden(await get(API, { host: 'localhost:3000' }));
+  });
+
+  it('refuses cross-site API requests before any work or rate-limit spend', async () => {
+    h = await createHarness();
+    expectForbidden(await get(API, { 'sec-fetch-site': 'cross-site' }));
+    expect(h.sync.calls).toHaveLength(0);
+    for (const site of ['same-origin', 'same-site', 'none']) {
+      expect((await get(API, { 'sec-fetch-site': site })).statusCode).toBe(200);
+    }
+    expect((await get(API)).headers['x-ratelimit-remaining']).toBe('116');
+  });
+
+  it('lets cross-site requests reach the probes', async () => {
+    h = await createHarness();
+    expect((await get('/healthz', { 'sec-fetch-site': 'cross-site' })).statusCode).toBe(200);
+  });
+});
+
+describe('server options', () => {
+  it('sets request and connection timeouts', async () => {
+    h = await createHarness();
+    expect(h.app.initialConfig).toMatchObject({ requestTimeout: 180_000, connectionTimeout: 10_000 });
+  });
+
+  it('trusts X-Forwarded-For only when TRUST_PROXY is set', async () => {
+    h = await createHarness();
+    h.app.get('/ip', async (request) => ({ ip: request.ip }));
+    expect((await get('/ip', { 'x-forwarded-for': '203.0.113.7' })).json()).not.toEqual({ ip: '203.0.113.7' });
+    await h.close();
+
+    h = await createHarness({ config: { trustProxy: true } });
+    h.app.get('/ip', async (request) => ({ ip: request.ip }));
+    expect((await get('/ip', { 'x-forwarded-for': '203.0.113.7' })).json()).toEqual({ ip: '203.0.113.7' });
+  });
+});

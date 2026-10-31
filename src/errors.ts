@@ -115,6 +115,15 @@ export class NarrativeBudgetError extends AppError {
   }
 }
 
+export class ForbiddenRequestError extends AppError {
+  readonly status = 403;
+  readonly type = `${PROBLEM_BASE}forbidden`;
+  readonly title = 'Request refused';
+  constructor(detail: string) {
+    super(detail);
+  }
+}
+
 export class NotReadyError extends AppError {
   readonly status = 503;
   readonly type = `${PROBLEM_BASE}not-ready`;

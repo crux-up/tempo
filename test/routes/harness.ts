@@ -25,6 +25,8 @@ export const testConfig: Config = {
   syncMaxPages: 40,
   syncMaxSeconds: 25,
   narrativeMaxPerHour: 30,
+  allowedHosts: ['localhost', '127.0.0.1'],
+  trustProxy: false,
   logLevel: 'info',
 };
 
@@ -82,7 +84,12 @@ export type Harness = {
  * route is backed by `narrativeModel` when given, otherwise it is not configured.
  */
 export async function createHarness(
-  opts: { webRoot?: string; narrativeModel?: NarrativeModel; narrativeMaxPerHour?: number } = {},
+  opts: {
+    webRoot?: string;
+    narrativeModel?: NarrativeModel;
+    narrativeMaxPerHour?: number;
+    config?: Partial<Config>;
+  } = {},
 ): Promise<Harness> {
   const db = openDatabase(':memory:');
   const store = new Store(db);
@@ -113,7 +120,7 @@ export async function createHarness(
       })
     : null;
   const app = await buildApp({
-    config: testConfig,
+    config: { ...testConfig, ...opts.config },
     store,
     reviewFlow,
     narrative,

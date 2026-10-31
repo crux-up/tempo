@@ -17,7 +17,7 @@ import {
 import { pino, type DestinationStream, type Logger, type LoggerOptions } from 'pino';
 import type { Config } from './config.js';
 import type { Store } from './db/store.js';
-import { TooManyRequestsError } from './errors.js';
+import { ForbiddenRequestError, TooManyRequestsError } from './errors.js';
 import { registerProblemHandlers, requestPath, sendFrameworkError, sendNotFound } from './http/problem.js';
 import type { NarrativeService } from './narrative/narrativeService.js';
 import { healthRoutes } from './routes/health.js';
@@ -47,6 +47,10 @@ const REDACT_PATHS = [
 
 const DEFAULT_WEB_ROOT = fileURLToPath(new URL('../web/dist', import.meta.url));
 const RATE_LIMIT_PER_MINUTE = 120;
+/** Covers the longest request: a narrative waits up to about 150 seconds for the model. */
+const REQUEST_TIMEOUT_MS = 180_000;
+const CONNECTION_TIMEOUT_MS = 10_000;
+const PROBE_PATHS = new Set(['/healthz', '/readyz']);
 /** Route pattern @fastify/static registers for `prefix: '/'`. */
 const STATIC_CATCH_ALL = '/*';
 
@@ -95,6 +99,22 @@ function targetsApi(request: FastifyRequest): boolean {
   }
 }
 
+/** Host name of the request without port or IPv6 brackets, lowercased; X-Forwarded-Host only with trustProxy. */
+const hostName = (request: FastifyRequest) => request.hostname.toLowerCase().replace(/^\[(.*)\]$/, '$1');
+
+/**
+ * Refuses requests a web page in the operator's browser could send. A Host outside `allowedHosts` means DNS
+ * rebinding (or a misrouted request) and is refused everywhere. `Sec-Fetch-Site: cross-site` means another site
+ * made the browser call the API; GETs here start syncs and model calls, so the API refuses it. The probes accept
+ * it: they do no work. Runs before the rate limiter, so refused requests spend no client budget.
+ */
+function guardRequest(request: FastifyRequest, allowedHosts: ReadonlySet<string>): void {
+  if (!allowedHosts.has(hostName(request))) throw new ForbiddenRequestError('The Host header is not allowed');
+  if (request.headers['sec-fetch-site'] === 'cross-site' && !PROBE_PATHS.has(requestPath(request))) {
+    throw new ForbiddenRequestError('Cross-site requests to the API are not allowed');
+  }
+}
+
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const loggerInstance: FastifyBaseLogger | undefined =
     deps.logger === false ? undefined : (deps.logger ?? createLogger(deps.config));
@@ -103,12 +123,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     genReqId: () => randomUUID(),
     requestIdHeader: false,
     frameworkErrors: sendFrameworkError,
+    requestTimeout: REQUEST_TIMEOUT_MS,
+    connectionTimeout: CONNECTION_TIMEOUT_MS,
+    trustProxy: deps.config.trustProxy,
   });
 
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
+  const allowedHosts = new Set(deps.config.allowedHosts);
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-request-id', request.id);
+    guardRequest(request, allowedHosts);
   });
   registerProblemHandlers(app);
 
@@ -164,6 +189,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const webRoot = deps.webRoot ?? DEFAULT_WEB_ROOT;
   const serveSpa = existsSync(join(webRoot, 'index.html'));
   if (serveSpa) await app.register(fastifyStatic, { root: webRoot, prefix: '/' });
+  else app.log.warn({ webRoot }, 'dashboard not built; run npm run build');
 
   app.setNotFoundHandler({ preHandler: app.rateLimit() }, (request: FastifyRequest, reply: FastifyReply) => {
     // Client-side routes resolve to the SPA shell; API paths and asset requests get a problem.
