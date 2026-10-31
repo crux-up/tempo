@@ -429,11 +429,11 @@ describe('commitPages', () => {
     expect(h.calls[0]?.body.query).not.toMatch(/additions|deletions/);
   });
 
-  it('strips control and bidi characters from git author names and caps them at 100 characters', async () => {
+  it('strips control, bidi and zero-width characters from git author names and caps them at 100 characters', async () => {
     const h = harness([
       commitPage(
         [
-          rawCommit('a1', { author: { name: 'admin\u202Enimda\u0007\u2066x\u2069\u200F', user: null } }),
+          rawCommit('a1', { author: { name: 'admin\u202Enimda\u0007\u2066x\u2069\u200F\u200Bz\u200D\uFEFF', user: null } }),
           rawCommit('a2', { author: { name: 'n'.repeat(150), user: null } }),
           rawCommit('a3', { author: { name: `${'\u00E9'.repeat(99)}\u{1F600}tail`, user: null } }),
         ],
@@ -443,7 +443,7 @@ describe('commitPages', () => {
     ]);
     const [page] = await collect(h.client.commitPages(repo, 'main', 'a', 'b'));
     expect(page?.commits.map((c) => c.authorName)).toEqual([
-      'adminnimdax',
+      'adminnimdaxz',
       'n'.repeat(100),
       `${'\u00E9'.repeat(99)}\u{1F600}`,
     ]);

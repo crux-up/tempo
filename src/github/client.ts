@@ -23,7 +23,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const RETRY_DELAYS_MS = [500, 1500];
 const DEFAULT_RETRY_AFTER_SECONDS = 60;
 
-export type GitHubQuota = { remaining: number; resetAt: string };
+type GitHubQuota = { remaining: number; resetAt: string };
 
 /**
  * Every page carries `requests`: the HTTP requests GitHub answered to build it, retries and review follow-up pages

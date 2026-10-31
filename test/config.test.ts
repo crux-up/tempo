@@ -28,6 +28,9 @@ describe('loadConfig', () => {
     expect(config.allowedHosts).toEqual(['tempo.example', '10.0.0.5', '::1']);
     expect(() => loadConfig({ GITHUB_TOKEN: 'x', ALLOWED_HOSTS: 'ok.example,bad host' })).toThrow(/ALLOWED_HOSTS/);
     expect(() => loadConfig({ GITHUB_TOKEN: 'x', ALLOWED_HOSTS: ',' })).toThrow(/ALLOWED_HOSTS/);
+    // A port can never match: the guard compares host names only.
+    expect(() => loadConfig({ GITHUB_TOKEN: 'x', ALLOWED_HOSTS: 'localhost:3000' })).toThrow(/ALLOWED_HOSTS/);
+    expect(loadConfig({ GITHUB_TOKEN: 'x', ALLOWED_HOSTS: 'fe80::1' }).allowedHosts).toEqual(['fe80::1']);
   });
 
   it('reads NARRATIVE_MAX_PER_CLIENT_PER_HOUR as a positive integer', () => {

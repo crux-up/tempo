@@ -48,13 +48,17 @@ async function main(): Promise<void> {
       logger,
     });
     const ref = { owner: repo.data.owner, name: repo.data.repo };
-    const window = parseWindow({ from, to }, new Date());
-    const result = await sync.ensureSynced(ref, window);
-    console.log(`${result.repo.owner}/${result.repo.name} synced as of ${result.dataAsOf}`);
-    console.log(
-      `window ${window.from.toISOString()} to ${window.to.toISOString()}; ` +
-        `coverage ${result.coverage.from} to ${result.coverage.to}${result.coverage.partial ? ' (partial)' : ''}`,
-    );
+    // With --narrative the narrative request does the one sync, over the window it needs; a separate sync first
+    // would run a second, slightly different backfill.
+    if (!withNarrative) {
+      const window = parseWindow({ from, to }, new Date());
+      const result = await sync.ensureSynced(ref, window);
+      console.log(`${result.repo.owner}/${result.repo.name} synced as of ${result.dataAsOf}`);
+      console.log(
+        `window ${window.from.toISOString()} to ${window.to.toISOString()}; ` +
+          `coverage ${result.coverage.from} to ${result.coverage.to}${result.coverage.partial ? ' (partial)' : ''}`,
+      );
+    }
 
     if (config.anthropicApiKey && withNarrative) {
       const narratives = new NarrativeService({
@@ -71,6 +75,9 @@ async function main(): Promise<void> {
       const latency = ((performance.now() - startedAt) / 1000).toFixed(1);
       const confidence = narrative.hypothesis ? narrative.hypothesis.confidence.toFixed(2) : 'none';
       console.log(
+        `${narrative.repo} synced as of ${narrative.dataAsOf}; coverage ${narrative.coverage.from} to ${narrative.coverage.to}` +
+          `${narrative.coverage.partial ? ' (partial)' : ''}
+` +
         `narrative ${narrative.cached ? 'cached' : 'new'} for ${narrative.window.from} to ${narrative.window.to}; ` +
           `model ${narrative.model}; confidence ${confidence}; latency ${latency}s`,
       );

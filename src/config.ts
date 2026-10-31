@@ -46,7 +46,17 @@ const hostList = (fallback: string) =>
       .string()
       .default(fallback)
       .transform((list) => list.split(',').map((host) => host.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1')))
-      .pipe(z.array(z.string().regex(HOST_NAME)).min(1)),
+      .pipe(
+        z
+          .array(
+            z
+              .string()
+              .regex(HOST_NAME)
+              // The guard compares host names only; one colon means "host:port", which could never match.
+              .refine((host) => host.split(':').length !== 2, 'list host names without a port'),
+          )
+          .min(1),
+      ),
   );
 
 /** An IP address, optionally with a CIDR prefix that fits its family. */
