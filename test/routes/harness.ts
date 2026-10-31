@@ -42,6 +42,8 @@ export class FakeSync {
   failWith: Error | null = null;
   dataAsOf = DATA_AS_OF;
   syncedFrom: string | null = null;
+  /** Marks the refresh as cut short, as SyncService does when it stops before the window end. */
+  refreshIncomplete = false;
 
   constructor(private readonly store: Store) {}
 
@@ -60,7 +62,7 @@ export class FakeSync {
         syncedFrom: this.syncedFrom ?? earliest,
         syncedAt: this.dataAsOf,
         backfillCursor: null,
-        refreshIncomplete: false,
+        refreshIncomplete: this.refreshIncomplete,
       });
     }
     const record = this.store.getRepo(key) as RepoRecord;

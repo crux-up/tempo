@@ -167,6 +167,15 @@ describe('NarrativeService', () => {
     expect(model.calls).toBe(1);
   });
 
+  it('still starts at the synced data after a refresh that was cut short', async () => {
+    sync.refreshIncomplete = true;
+
+    const res = await service.getNarrative(REPO, {});
+
+    expect(res.window).toEqual({ from: '2026-02-18T00:00:00.000Z', to: MIDNIGHT });
+    expect(res.coverage).toEqual({ partial: false, from: '2026-02-18T00:00:00.000Z', to: MIDNIGHT });
+  });
+
   it('keeps the facts and the cache entry for the whole day across re-syncs', async () => {
     now = new Date('2026-03-19T10:00:00.000Z');
     sync.dataAsOf = '2026-03-19T09:55:00.000Z';

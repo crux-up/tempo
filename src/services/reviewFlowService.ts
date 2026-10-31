@@ -81,7 +81,8 @@ export class ReviewFlowService {
     if (query.from === undefined) {
       const defaultFrom = to - DEFAULT_WINDOW_MS;
       const syncedFrom = synced.repo.syncedFrom === null ? Number.NaN : Date.parse(synced.repo.syncedFrom);
-      const clamp = openEnded && !synced.coverage.partial && !Number.isNaN(syncedFrom);
+      // Only the bottom edge matters here: a refresh cut short at the top does not make the start partial.
+      const clamp = openEnded && !Number.isNaN(syncedFrom) && syncedFrom <= syncFrom;
       from = clamp ? Math.max(defaultFrom, syncedFrom) : defaultFrom;
     }
     if (from >= to) {
