@@ -352,6 +352,18 @@ describe('SyncService', () => {
     expect(a).toEqual(b);
   });
 
+  it('gives a concurrent caller with a wider window coverage for its own window', async () => {
+    const sync = service();
+
+    const [march, wider] = await Promise.all([sync.ensureSynced(REPO, MARCH), sync.ensureSynced(REPO, FROM_FEB_15)]);
+
+    expect(github.repoCalls).toHaveLength(1);
+    expect(march.coverage).toEqual({ partial: false, from: '2026-03-01T00:00:00.000Z', to: T0.toISOString() });
+    expect(wider.coverage).toEqual({ partial: false, from: '2026-02-15T00:00:00.000Z', to: T0.toISOString() });
+    const stored = store.loadWindowData(wider.repo.id, FROM_FEB_15, T0).pullRequests.map((p) => p.number);
+    expect(stored).toContain(5);
+  });
+
   it('resolves differently cased names to the same repo using canonical names', async () => {
     const sync = service();
     const a = await sync.ensureSynced({ owner: 'Fastify', name: 'FASTIFY' }, MARCH);

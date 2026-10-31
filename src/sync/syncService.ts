@@ -64,21 +64,33 @@ export class SyncService {
     this.now = deps.now ?? (() => new Date());
   }
 
+  /** Concurrent callers share the running sync, then each one checks its own window and syncs again if needed. */
   async ensureSynced(repo: RepoRef, window: TimeWindow): Promise<SyncResult> {
     const key = `${repo.owner}/${repo.name}`.toLowerCase();
-    let run = this.inFlight.get(key);
-    if (!run) {
-      run = this.run(key, repo, window).finally(() => this.inFlight.delete(key));
+    for (;;) {
+      const pending = this.inFlight.get(key);
+      if (pending) {
+        const budgetHit = await pending;
+        const record = this.deps.store.getRepo(key) as RepoRecord;
+        if (budgetHit || !this.needsWork(record, window)) return this.result(record, window);
+        continue;
+      }
+      const run = this.run(key, repo, window).finally(() => this.inFlight.delete(key));
       this.inFlight.set(key, run);
+      await run;
+      return this.result(this.deps.store.getRepo(key) as RepoRecord, window);
     }
-    await run;
-    return this.result(this.deps.store.getRepo(key) as RepoRecord, window);
   }
 
   private plan(repo: RepoRecord, window: TimeWindow, at: number) {
     const needBackfill = repo.syncedFrom === null || window.from.getTime() < toMs(repo.syncedFrom);
     const needRefresh = repo.syncedAt !== null && at - toMs(repo.syncedAt) > this.deps.ttlMinutes * 60_000;
     return { needBackfill, needRefresh };
+  }
+
+  private needsWork(repo: RepoRecord, window: TimeWindow): boolean {
+    const { needBackfill, needRefresh } = this.plan(repo, window, this.now().getTime());
+    return needBackfill || needRefresh;
   }
 
   /** Syncs what `window` needs and reports whether the budget cut any pass short. */
