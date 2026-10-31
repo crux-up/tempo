@@ -85,6 +85,11 @@ export type Totals = Omit<PersonStats, 'login' | 'unlinked' | 'reviewShare' | 'c
 
 export type ReviewFlowMetrics = { team: TeamStats; people: PersonStats[]; totals: Totals; weekly: WeekStats[] };
 
+/**
+ * Contract: `pullRequests` must include every PR that owns a review submitted in the window (plus PRs created or
+ * merged in it), and `reviews` must hold all reviews (submitted at or before `asOf`) of every PR listed. Reviews
+ * whose PR is missing from `pullRequests` are dropped by `computeReviewFlow`.
+ */
 export type MetricsInput = {
   pullRequests: PullRequestRow[];
   reviews: ReviewRow[];
