@@ -139,7 +139,7 @@ describe('createAnthropicNarrativeModel', () => {
     expect(result).toEqual({
       draft: DRAFT,
       model: 'claude-opus-4-8',
-      usage: { inputTokens: 1000, outputTokens: 200, cacheReadTokens: 800 },
+      usage: { inputTokens: 1000, outputTokens: 200, cacheReadTokens: 800, cacheWriteTokens: 0 },
     });
   });
 
@@ -159,13 +159,20 @@ describe('createAnthropicNarrativeModel', () => {
 
   it('sums token usage over usage.iterations when present', async () => {
     const iterations = [
-      { type: 'message', input_tokens: 300, output_tokens: 50, cache_read_input_tokens: 100 },
-      { type: 'fallback_message', input_tokens: 700, output_tokens: 250, cache_read_input_tokens: 0 },
+      { type: 'message', input_tokens: 300, output_tokens: 50, cache_read_input_tokens: 100, cache_creation_input_tokens: 40 },
+      {
+        type: 'fallback_message',
+        input_tokens: 700,
+        output_tokens: 250,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 60,
+      },
     ];
 
     const result = await modelWith(scripted(message({ text: JSON.stringify(DRAFT), iterations }))).draft(sheet);
 
-    expect(result.usage).toEqual({ inputTokens: 1000, outputTokens: 300, cacheReadTokens: 100 });
+    expect(result.usage).toEqual({ inputTokens: 1000, outputTokens: 300, cacheReadTokens: 100, cacheWriteTokens: 100 });
+    expect(logged('Language model call finished')[0]).toMatchObject({ cacheWriteTokens: 100, inputTokens: 1000 });
   });
 
   it('retries once when the output does not match the schema, summing usage', async () => {
@@ -174,7 +181,7 @@ describe('createAnthropicNarrativeModel', () => {
     expect(calls).toHaveLength(2);
     expect(calls[1]).toEqual(calls[0]);
     expect(result.draft).toEqual(DRAFT);
-    expect(result.usage).toEqual({ inputTokens: 2000, outputTokens: 400, cacheReadTokens: 1600 });
+    expect(result.usage).toEqual({ inputTokens: 2000, outputTokens: 400, cacheReadTokens: 1600, cacheWriteTokens: 0 });
   });
 
   it('gives up with LlmError when the retry is also invalid', async () => {
@@ -188,6 +195,13 @@ describe('createAnthropicNarrativeModel', () => {
     const err = await failure(scripted(message({ text: '{"summary": "Rev', stop_reason: 'max_tokens' })));
 
     expect(err).toEqual(new LlmError('The model ran out of output tokens before finishing the narrative'));
+    expect(calls).toHaveLength(1);
+  });
+
+  it.each(['pause_turn', 'stop_sequence', 'tool_use'])('fails at once on stop_reason %s', async (stopReason) => {
+    const err = await failure(scripted(message({ text: JSON.stringify(DRAFT), stop_reason: stopReason }), valid()));
+
+    expect(err).toEqual(new LlmError(`The model stopped before finishing the narrative (${stopReason})`));
     expect(calls).toHaveLength(1);
   });
 

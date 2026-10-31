@@ -34,7 +34,7 @@ export class FakeNarrativeModel implements NarrativeModel {
     return {
       draft: this.nextDraft,
       model: this.servedModel,
-      usage: { inputTokens: 1200, outputTokens: 300, cacheReadTokens: 900 },
+      usage: { inputTokens: 1200, outputTokens: 300, cacheReadTokens: 900, cacheWriteTokens: 0 },
     };
   }
 

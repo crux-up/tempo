@@ -22,7 +22,7 @@ export type Narrative = {
 };
 
 /** Part of the narrative cache key: change it whenever verifyNarrative or confidenceCap changes its output. */
-export const VERIFIER_VERSION = '1';
+export const VERIFIER_VERSION = '2';
 
 const CAPS: [{ below: number; max: number }, ...{ below: number; max: number }[]] = [
   { below: 10, max: 0.3 },
@@ -30,6 +30,7 @@ const CAPS: [{ below: number; max: number }, ...{ below: number; max: number }[]
 ];
 
 const MAX_DROPPED_IDS = 20;
+const META_PREFIX = 'meta.';
 const MAX_ID_LENGTH = 120;
 
 const numberFact = (sheet: FactSheet, id: string): number | null => {
@@ -58,11 +59,17 @@ const clamp01 = (n: number) => (Number.isNaN(n) ? 0 : Math.min(1, Math.max(0, n)
 /**
  * Keeps the draft text verbatim but trusts none of its numbers: each evidence id is looked up in the sheet and
  * replaced by the sheet's label, value and unit. Unknown ids and ids of facts with a null value are dropped and
- * listed (at most 20, each cut to 120 characters); a finding or hypothesis left without evidence is dropped. Confidence is clamped to [0, 1] and then to `confidenceCap`.
+ * listed, as are `meta.*` ids in an evidence list that cites nothing else (at most 20, each cut to 120 characters).
+ * A finding or hypothesis left without evidence is dropped. Confidence is clamped to [0, 1] and then to
+ * `confidenceCap`.
  */
 export function verifyNarrative(draft: NarrativeDraft, sheet: FactSheet): Narrative {
   const facts = new Map(sheet.facts.map((f) => [f.id, f]));
   const dropped = new Set<string>();
+
+  const drop = (id: string) => {
+    if (dropped.size < MAX_DROPPED_IDS) dropped.add(id.slice(0, MAX_ID_LENGTH));
+  };
 
   const resolve = (evidenceIds: string[]): Evidence[] => {
     const evidence: Evidence[] = [];
@@ -70,9 +77,14 @@ export function verifyNarrative(draft: NarrativeDraft, sheet: FactSheet): Narrat
       const fact = facts.get(id);
       if (fact && fact.value !== null) {
         evidence.push({ factId: fact.id, label: fact.label, value: fact.value, unit: fact.unit });
-      } else if (dropped.size < MAX_DROPPED_IDS) {
-        dropped.add(id.slice(0, MAX_ID_LENGTH));
+      } else {
+        drop(id);
       }
+    }
+    // Context facts describe how the data was collected; on their own they support no claim.
+    if (evidence.every((e) => e.factId.startsWith(META_PREFIX))) {
+      for (const e of evidence) drop(e.factId);
+      return [];
     }
     return evidence;
   };

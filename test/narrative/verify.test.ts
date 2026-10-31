@@ -13,6 +13,8 @@ const sheetWith = (prsOpened: number, prsMerged: number): FactSheet => ({
     { id: 'team.timeToFirstReview.median', label: 'Median hours to first review', value: 74, unit: 'hours', sampleSize: 2 },
     { id: 'person.bob.prsReviewed', label: 'bob: PRs reviewed', value: 2, unit: 'count' },
     { id: 'team.timeToMerge.median', label: 'Median hours to merge', value: null, unit: 'hours', sampleSize: 0 },
+    { id: 'meta.includeBots', label: 'Bot accounts are counted as people (1 = yes, 0 = no)', value: 0, unit: 'count' },
+    { id: 'meta.coveragePartial', label: 'Synced data covers only part of the window', value: 1, unit: 'count' },
   ],
   signals: [],
 });
@@ -211,5 +213,35 @@ describe('NarrativeDraftSchema', () => {
   it('converts to a plain JSON schema with no numeric or string constraints', () => {
     const json = JSON.stringify(z.toJSONSchema(NarrativeDraftSchema));
     expect(json).not.toMatch(/minimum|maximum|minLength|maxLength|pattern|minItems|maxItems/);
+  });
+});
+
+describe('verifyNarrative with context facts', () => {
+  it('drops a finding whose evidence is only meta facts and records the ids', () => {
+    const result = verifyNarrative(
+      draft({ findings: [{ claim: 'Bots are excluded.', evidence: ['meta.includeBots', 'meta.coveragePartial'] }] }),
+      sheet,
+    );
+
+    expect(result.findings).toEqual([]);
+    expect(result.verification.droppedFindings).toBe(1);
+    expect(result.verification.droppedEvidenceIds).toEqual(['meta.includeBots', 'meta.coveragePartial']);
+  });
+
+  it('drops a hypothesis whose evidence is only meta facts', () => {
+    const result = verifyNarrative(draft({ hypothesis: hypothesis({ evidence: ['meta.coveragePartial'] }) }), sheet);
+
+    expect(result.hypothesis).toBeNull();
+    expect(result.verification.droppedEvidenceIds).toEqual(['meta.coveragePartial']);
+  });
+
+  it('keeps meta facts cited next to a metric fact', () => {
+    const result = verifyNarrative(
+      draft({ findings: [{ claim: 'Data is partial.', evidence: ['meta.coveragePartial', 'team.prsOpened'] }] }),
+      sheet,
+    );
+
+    expect(result.findings[0]?.evidence.map((e) => e.factId)).toEqual(['meta.coveragePartial', 'team.prsOpened']);
+    expect(result.verification.droppedEvidenceIds).toEqual([]);
   });
 });

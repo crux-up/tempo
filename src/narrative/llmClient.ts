@@ -15,7 +15,12 @@ import { NarrativeDraftSchema, type NarrativeDraft } from './schema.js';
 type MessageParams = Anthropic.Beta.Messages.MessageCreateParamsNonStreaming;
 type Message = Anthropic.Beta.Messages.BetaMessage;
 
-export type TokenUsage = { inputTokens: number; outputTokens: number; cacheReadTokens: number };
+export type TokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+};
 /** `model` is the model that wrote the draft; a server-side fallback can make it differ from the requested one. */
 export type NarrativeModelResult = { draft: NarrativeDraft; model: string; usage: TokenUsage };
 
@@ -29,18 +34,20 @@ export type CreateMessage = (params: MessageParams, options: { signal: AbortSign
 /**
  * Time limits for one `draft()` call. `attemptTimeoutMs` bounds each attempt (SDK retries included);
  * `deadlineMs` bounds the whole call; the retry for invalid output runs only when at least `minRetryBudgetMs` of
- * the deadline remains.
+ * the deadline remains. The retry check reads the injected clock (`now`); the abort timers always use real time.
  */
 export type ModelLimits = { attemptTimeoutMs: number; deadlineMs: number; minRetryBudgetMs: number };
 
 const DEFAULT_LIMITS: ModelLimits = { attemptTimeoutMs: 120_000, deadlineMs: 150_000, minRetryBudgetMs: 60_000 };
 const MAX_TOKENS = 16_000;
 const SDK_MAX_RETRIES = 1;
-/** Attempts per draft: the first, plus one retry when the output is not valid JSON for the schema. */
+/** Attempts per draft: the first, plus one retry when a finished answer is not valid JSON for the schema. */
 const MAX_ATTEMPTS = 2;
 const DEFAULT_RETRY_AFTER_SECONDS = 60;
 const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 const OUTPUT_FORMAT = betaZodOutputFormat(NarrativeDraftSchema);
+
+const EMPTY_USAGE: TokenUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
 
 const REFUSED = 'The model declined to analyse this data';
 const TRUNCATED = 'The model ran out of output tokens before finishing the narrative';
@@ -103,6 +110,7 @@ function messageUsage(message: Message): TokenUsage {
       inputTokens: usage.input_tokens,
       outputTokens: usage.output_tokens,
       cacheReadTokens: usage.cache_read_input_tokens ?? 0,
+      cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
     };
   }
   return iterations.reduce<TokenUsage>(
@@ -110,8 +118,9 @@ function messageUsage(message: Message): TokenUsage {
       inputTokens: sum.inputTokens + it.input_tokens,
       outputTokens: sum.outputTokens + it.output_tokens,
       cacheReadTokens: sum.cacheReadTokens + (it.cache_read_input_tokens ?? 0),
+      cacheWriteTokens: sum.cacheWriteTokens + (it.cache_creation_input_tokens ?? 0),
     }),
-    { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 },
+    EMPTY_USAGE,
   );
 }
 
@@ -119,6 +128,7 @@ const addUsage = (a: TokenUsage, b: TokenUsage): TokenUsage => ({
   inputTokens: a.inputTokens + b.inputTokens,
   outputTokens: a.outputTokens + b.outputTokens,
   cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+  cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
 });
 
 function retryAfterSeconds(error: RateLimitError): number {
@@ -157,9 +167,9 @@ function sdkCreateMessage(apiKey: string): CreateMessage {
 
 /**
  * Drafts a narrative with structured output, within `limits` (defaults: 120 s per attempt, 150 s overall).
- * A refusal, output cut off at max_tokens, or a timeout fails at once. Output that is not valid JSON for the schema
- * is requested once more with the same request when enough of the deadline remains, then fails. The SDK retries a
- * rate limit, overload or connection failure once.
+ * A refusal, any stop reason other than end_turn, or a timeout fails at once. A finished answer that is not valid
+ * JSON for the schema is requested once more with the same request when enough of the deadline remains, then
+ * fails. The SDK retries a rate limit, overload or connection failure once.
  */
 export function createAnthropicNarrativeModel(opts: {
   apiKey: string;
@@ -179,7 +189,7 @@ export function createAnthropicNarrativeModel(opts: {
       const request = buildRequest(opts.model, sheet);
       const deadline = AbortSignal.timeout(limits.deadlineMs);
       const callStartedAt = now();
-      let usage: TokenUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
+      let usage = EMPTY_USAGE;
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         if (attempt > 1 && limits.deadlineMs - (now() - callStartedAt) < limits.minRetryBudgetMs) {
@@ -218,13 +228,15 @@ export function createAnthropicNarrativeModel(opts: {
             refusalCategory: message.stop_details?.category ?? null,
             latencyMs: Math.round(now() - startedAt),
             ...attemptUsage,
-            cacheWriteTokens: message.usage.cache_creation_input_tokens ?? 0,
             validOutput: draft !== null,
           },
           'Language model call finished',
         );
         if (message.stop_reason === 'refusal') throw new LlmError(REFUSED);
         if (message.stop_reason === 'max_tokens') throw new LlmError(TRUNCATED);
+        if (message.stop_reason !== 'end_turn') {
+          throw new LlmError(`The model stopped before finishing the narrative (${message.stop_reason ?? 'unknown'})`);
+        }
         if (draft) return { draft, model: message.model, usage };
       }
       throw new LlmError(INVALID_OUTPUT);

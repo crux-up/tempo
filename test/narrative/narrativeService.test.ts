@@ -154,9 +154,20 @@ describe('NarrativeService', () => {
     now = new Date(AS_OF.getTime() + 60_000);
     const second = await service.getNarrative(REPO, {});
 
-    expect(first.window).toEqual({ from: '2026-02-17T23:50:00.000Z', to: DATA_AS_OF });
+    // The default from (to - 30 days) would start before the synced data, so it is clamped to the synced start.
+    expect(first.window).toEqual({ from: '2026-02-18T00:00:00.000Z', to: DATA_AS_OF });
+    expect(first.coverage.partial).toBe(false);
     expect(second).toMatchObject({ cached: true, window: first.window });
     expect(model.calls).toBe(1);
+  });
+
+  it('starts a snapped default window 30 days before the snapshot when the synced data reaches back that far', async () => {
+    sync.syncedFrom = '2026-01-01T00:00:00.000Z';
+
+    const res = await service.getNarrative(REPO, {});
+
+    expect(res.window).toEqual({ from: '2026-02-17T23:50:00.000Z', to: DATA_AS_OF });
+    expect(res.coverage.partial).toBe(false);
   });
 
   it('keeps an explicit from when snapping an open-ended to', async () => {
@@ -169,6 +180,22 @@ describe('NarrativeService', () => {
     const res = await service.getNarrative(REPO, { from: '2026-03-02', to: '2026-03-20' });
 
     expect(res.window.to).toBe(DATA_AS_OF);
+  });
+
+  it('syncs exactly once per request, even when snapping a partially synced open-ended window', async () => {
+    sync.syncedFrom = '2026-03-10T00:00:00.000Z';
+
+    const res = await service.getNarrative(REPO, {});
+
+    expect(sync.calls).toHaveLength(1);
+    expect(res.window.to).toBe(DATA_AS_OF);
+    expect(res.coverage).toEqual({ partial: true, from: '2026-03-10T00:00:00.000Z', to: DATA_AS_OF });
+  });
+
+  it('syncs exactly once for an explicit window', async () => {
+    await service.getNarrative(REPO, ACTIVE);
+
+    expect(sync.calls).toHaveLength(1);
   });
 
   it('treats a cached body that fails the response schema as a miss and logs it', async () => {

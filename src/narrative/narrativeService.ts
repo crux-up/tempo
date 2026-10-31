@@ -4,7 +4,7 @@ import type { RepoRef } from '../domain/types.js';
 import { NarrativeResponseSchema, type ReviewFlowQuery } from '../http/params.js';
 import type { Logger } from '../logger.js';
 import type { ReviewFlowReport, ReviewFlowService } from '../services/reviewFlowService.js';
-import type { Coverage } from '../sync/syncService.js';
+import { repoKey, type Coverage } from '../sync/syncService.js';
 import { buildFactSheet, type FactSheet } from './factSheet.js';
 import type { NarrativeModel, TokenUsage } from './llmClient.js';
 import { PROMPT_VERSION } from './prompt.js';
@@ -27,7 +27,7 @@ type NarrativeDeps = {
   model: NarrativeModel;
   modelName: string;
   store: Store;
-  reviewFlow: Pick<ReviewFlowService, 'getReport'>;
+  reviewFlow: Pick<ReviewFlowService, 'getReport' | 'getStoredReport'>;
   logger: Logger;
 };
 
@@ -37,6 +37,9 @@ const StoredBodySchema = NarrativeResponseSchema.omit({ cached: true });
 
 /** Reported as the model of a narrative that no model wrote. */
 const NO_MODEL = 'none';
+
+/** The default window length, as in `parseWindow`. */
+const DEFAULT_WINDOW_MS = 30 * 86_400_000;
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
 
@@ -99,16 +102,31 @@ export class NarrativeService {
 
   /**
    * The report for the request, with an open-ended `to` (absent, or later than the data snapshot) snapped to the
-   * snapshot time `dataAsOf`, and a defaulted `from` kept relative to it. Requests between syncs then resolve to the
-   * same window and share a cache entry. The second report reads the data the first one just synced.
+   * snapshot time `dataAsOf`, and a defaulted `from` kept 30 days before it. Requests between syncs then resolve to
+   * the same window and share a cache entry. The second report is built from the data the first one just synced,
+   * without another sync, so a request spends at most one sync budget.
+   *
+   * Moving a defaulted window back by (now - dataAsOf) can start it just before the synced data, which would flag a
+   * fully synced request as partial. When the first report was fully covered, the snapped `from` is therefore
+   * clamped to the start of the synced data; that start only moves when a backfill extends it, so the window stays
+   * stable between syncs.
    */
   private async snappedReport(repo: RepoRef, query: ReviewFlowQuery): Promise<ReviewFlowReport> {
     const report = await this.deps.reviewFlow.getReport(repo, query);
     const snapshot = Date.parse(report.dataAsOf);
     const openEnded = query.to === undefined || Date.parse(report.window.to) > snapshot;
-    if (!openEnded || Number.isNaN(snapshot) || snapshot <= Date.parse(report.window.from)) return report;
-    if (report.window.to === report.dataAsOf) return report;
-    return this.deps.reviewFlow.getReport(repo, { ...query, to: report.dataAsOf });
+    if (!openEnded || Number.isNaN(snapshot) || report.window.to === report.dataAsOf) return report;
+
+    let from = query.from;
+    if (from === undefined) {
+      const syncedFrom = this.deps.store.getRepo(repoKey(repo))?.syncedFrom;
+      const defaultFrom = snapshot - DEFAULT_WINDOW_MS;
+      const clampTo = !report.coverage.partial && syncedFrom ? Date.parse(syncedFrom) : defaultFrom;
+      const start = Math.max(defaultFrom, clampTo);
+      from = new Date(start).toISOString();
+    }
+    if (Date.parse(from) >= snapshot) return report;
+    return this.deps.reviewFlow.getStoredReport(repo, { ...query, from, to: report.dataAsOf });
   }
 
   /** The cached body for `key`, or null when absent or no longer valid for the response schema. */

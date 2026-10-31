@@ -1,9 +1,9 @@
 import type { Store } from '../db/store.js';
-import type { RepoRef, ReviewFlowMetrics } from '../domain/types.js';
+import type { RepoRef, ReviewFlowMetrics, TimeWindow } from '../domain/types.js';
 import { parseWindow } from '../domain/window.js';
 import type { ReviewFlowQuery } from '../http/params.js';
 import { computeReviewFlow } from '../metrics/reviewFlow.js';
-import type { Coverage, SyncService } from '../sync/syncService.js';
+import { coverageOf, repoKey, type Coverage, type SyncResult, type SyncService } from '../sync/syncService.js';
 
 export type ReviewFlowReport = ReviewFlowMetrics & {
   repo: string;
@@ -52,8 +52,25 @@ export class ReviewFlowService {
   async getReport(repo: RepoRef, query: ReviewFlowQuery): Promise<ReviewFlowReport> {
     const now = this.now();
     const window = parseWindow(query, now);
-    const includeBots = query.includeBots === 'true';
     const synced = await this.deps.sync.ensureSynced(repo, window);
+    return this.build(synced, window, query, now);
+  }
+
+  /**
+   * The same report from data already stored, with no sync: for a follow-up window right after `getReport` synced
+   * the repo, so one request never pays for two sync budgets. Coverage is recomputed for this window.
+   */
+  getStoredReport(repo: RepoRef, query: ReviewFlowQuery): ReviewFlowReport {
+    const now = this.now();
+    const window = parseWindow(query, now);
+    const record = this.deps.store.getRepo(repoKey(repo));
+    if (!record?.syncedAt || !record.syncedFrom) throw new Error(`${repoKey(repo)} has not been synced`);
+    const synced = { repo: record, dataAsOf: record.syncedAt, coverage: coverageOf(record, window) };
+    return this.build(synced, window, query, now);
+  }
+
+  private build(synced: SyncResult, window: TimeWindow, query: ReviewFlowQuery, now: Date): ReviewFlowReport {
+    const includeBots = query.includeBots === 'true';
     const snapshotMs = Date.parse(synced.dataAsOf);
     const asOf = Number.isNaN(snapshotMs) ? now : new Date(Math.min(now.getTime(), snapshotMs));
     const data = snapshotAt(this.deps.store.loadWindowData(synced.repo.id, window, asOf), asOf);

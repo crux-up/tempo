@@ -48,6 +48,21 @@ class Budget {
 const toIso = (ms: number) => new Date(ms).toISOString();
 const toMs = (iso: string) => new Date(iso).getTime();
 
+/** Store key of a repository: `owner/name`, lowercased. */
+export const repoKey = (repo: RepoRef) => `${repo.owner}/${repo.name}`.toLowerCase();
+
+/** The part of `window` backed by stored data, for a repo that has been synced at least once. */
+export function coverageOf(repo: RepoRecord, window: TimeWindow): Coverage {
+  const syncedFrom = toMs(repo.syncedFrom as string);
+  const windowFrom = window.from.getTime();
+  const windowTo = window.to.getTime();
+  return {
+    partial: syncedFrom > windowFrom,
+    from: toIso(Math.min(Math.max(windowFrom, syncedFrom), windowTo)),
+    to: toIso(windowTo),
+  };
+}
+
 /**
  * Keeps the store in sync with GitHub on demand.
  *
@@ -66,7 +81,7 @@ export class SyncService {
 
   /** Concurrent callers share the running sync, then each one checks its own window and syncs again if needed. */
   async ensureSynced(repo: RepoRef, window: TimeWindow): Promise<SyncResult> {
-    const key = `${repo.owner}/${repo.name}`.toLowerCase();
+    const key = repoKey(repo);
     for (;;) {
       const pending = this.inFlight.get(key);
       if (pending) {
@@ -194,17 +209,6 @@ export class SyncService {
   }
 
   private result(repo: RepoRecord, window: TimeWindow): SyncResult {
-    const syncedFrom = toMs(repo.syncedFrom as string);
-    const windowFrom = window.from.getTime();
-    const windowTo = window.to.getTime();
-    return {
-      repo,
-      dataAsOf: repo.syncedAt as string,
-      coverage: {
-        partial: syncedFrom > windowFrom,
-        from: toIso(Math.min(Math.max(windowFrom, syncedFrom), windowTo)),
-        to: toIso(windowTo),
-      },
-    };
+    return { repo, dataAsOf: repo.syncedAt as string, coverage: coverageOf(repo, window) };
   }
 }
