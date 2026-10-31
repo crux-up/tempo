@@ -32,15 +32,16 @@ export function parseRepo(input: string): { owner: string; repo: string } | null
   return { owner, repo };
 }
 
-export function defaultQuery(): Query {
-  const to = today();
+/** The last 90 whole days, ending yesterday: a finished day, so the API's `to` is today 00:00 UTC and an explanation matches the metrics. */
+export function defaultQuery(now: Date = new Date()): Query {
+  const to = addDays(isoDay(now.getTime()), -1);
   const [owner, repo] = DEFAULT_REPO.split('/') as [string, string];
   return { owner, repo, from: addDays(to, -(DEFAULT_DAYS - 1)), to, includeBots: false };
 }
 
-export function queryFromSearch(search: string): Query {
+export function queryFromSearch(search: string, now: Date = new Date()): Query {
   const params = new URLSearchParams(search);
-  const fallback = defaultQuery();
+  const fallback = defaultQuery(now);
   const repo = parseRepo(params.get('repo') ?? '') ?? fallback;
   const toParam = params.get('to') ?? '';
   const fromParam = params.get('from') ?? '';

@@ -73,23 +73,46 @@ describe('NarrativePanel', () => {
     generatedAt: '2026-10-31T08:05:00.000Z',
   } satisfies Narrative;
 
-  const render = (reportDataAsOf: string) =>
+  const sameWindow = narrative.window;
+  const render = (reportDataAsOf: string, window = sameWindow, canCite: () => boolean = () => false, withEvidence = false) =>
     renderToStaticMarkup(
       <NarrativePanel
-        state={{ status: 'done', narrative }}
+        state={{ status: 'done', narrative: withEvidence ? { ...narrative, findings: [finding] } : narrative }}
         ready
         blockedReason={null}
-        reportDataAsOf={reportDataAsOf}
+        report={{ window, dataAsOf: reportDataAsOf }}
         onExplain={() => undefined}
         onCancel={() => undefined}
-        canCite={() => false}
+        canCite={canCite}
         onCite={() => undefined}
       />,
     );
 
-  it('says when the explanation describes older data than the page', () => {
-    expect(render('2026-10-31T09:00:00.000Z')).toContain('This explanation is based on data as of 31 Oct 2026, 08:00 UTC');
-    expect(render(narrative.dataAsOf)).not.toContain('This explanation is based on data as of');
+  const finding = {
+    claim: 'Reviews wait.',
+    evidence: [{ factId: 'team.prsOpened', label: 'PRs opened', value: 12, unit: 'count' }],
+  } as Narrative['findings'][number];
+  const LINE = 'Explains data from 3 Aug 2026 to 30 Oct 2026; the view above covers a different range.';
+
+  it('links its evidence when it matches the view', () => {
+    const markup = render(narrative.dataAsOf, sameWindow, () => true, true);
+    expect(markup).toContain('Show it on the dashboard');
+    expect(markup).not.toContain('chip-static');
+    expect(markup).not.toContain('the view above covers a different range');
+  });
+
+  it('shows static chips and one line when the window differs', () => {
+    const other = { from: '2026-08-03T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' };
+    const markup = render(narrative.dataAsOf, other, () => true, true);
+    expect(markup).toContain('chip-static');
+    expect(markup).not.toContain('Show it on the dashboard');
+    expect(markup).toContain(LINE);
+  });
+
+  it('shows static chips and the same line when the data snapshot differs', () => {
+    const markup = render('2026-10-31T09:00:00.000Z', sameWindow, () => true, true);
+    expect(markup).toContain('chip-static');
+    expect(markup.replace(/\s+/g, ' ')).toContain(LINE);
   });
 
   it('shows the last included day of the covered window', () => {
@@ -175,7 +198,7 @@ describe('NarrativePanel start', () => {
         state={{ status: 'idle' }}
         ready
         blockedReason={blockedReason}
-        reportDataAsOf={null}
+        report={null}
         onExplain={() => undefined}
         onCancel={() => undefined}
         canCite={() => false}

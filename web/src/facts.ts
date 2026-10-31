@@ -1,4 +1,4 @@
-import type { ReviewFlowReport } from './types';
+import type { Narrative, ReviewFlowReport } from './types';
 
 /**
  * Fact ids as the server's fact sheet names them. Numbers on screen carry `data-fact` with these ids, so an evidence
@@ -77,3 +77,15 @@ export function findFactElement(target: FactTarget): Element | null {
   if (target.kind === 'week') return document.querySelector(`[data-fact-row="${CSS.escape(weekRow(target.week))}"]`);
   return null;
 }
+
+/**
+ * Whether an explanation was written for the numbers on screen: the same window and the same data snapshot. Only
+ * then do its evidence values equal the dashboard's, so only then can a chip point at a number.
+ */
+export const narrativeMatchesReport = (
+  narrative: Pick<Narrative, 'window' | 'dataAsOf'>,
+  report: Pick<ReviewFlowReport, 'window' | 'dataAsOf'>,
+) =>
+  narrative.window.from === report.window.from &&
+  narrative.window.to === report.window.to &&
+  narrative.dataAsOf === report.dataAsOf;

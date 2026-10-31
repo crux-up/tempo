@@ -3,7 +3,7 @@ import { asProblem, fetchReport, problemKind } from './api';
 import { hourTicks, labelEvery } from './chart';
 import { factOnScreen, parseFact } from './facts';
 import { day, evidenceFigure, evidenceLabel, figureText, hours, share, windowEnd, windowStart } from './format';
-import { apiParams, narrativeBlock, parseRepo, queryFromSearch, searchFromQuery, validateWindow } from './query';
+import { apiParams, defaultQuery, narrativeBlock, parseRepo, queryFromSearch, searchFromQuery, validateWindow } from './query';
 import type { ReviewFlowReport } from './types';
 
 describe('format', () => {
@@ -73,6 +73,13 @@ describe('query', () => {
   it('falls back to a 90-day window ending at the given end date', () => {
     const query = queryFromSearch('?repo=nodejs/undici&to=2026-10-31&from=nonsense');
     expect(query).toMatchObject({ owner: 'nodejs', repo: 'undici', from: '2026-08-03', to: '2026-10-31' });
+  });
+
+  it('defaults to the last 90 whole days ending yesterday, so the API end is today', () => {
+    const now = new Date('2026-10-31T15:30:00Z');
+    expect(defaultQuery(now)).toMatchObject({ from: '2026-08-02', to: '2026-10-30' });
+    expect(queryFromSearch('', now)).toMatchObject({ from: '2026-08-02', to: '2026-10-30' });
+    expect(apiParams(defaultQuery(now)).get('to')).toBe('2026-10-31');
   });
 
   it('sends the inclusive end date as the next day', () => {

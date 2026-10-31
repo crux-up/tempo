@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Problem } from '../api';
 import { dateTime, evidenceFigure, evidenceLabel, figureText, share, windowEnd, windowStart } from '../format';
-import type { Evidence, Narrative } from '../types';
+import { narrativeMatchesReport } from '../facts';
+import type { Evidence, Narrative, ReviewFlowReport } from '../types';
 import { Num } from './Num';
 import { ProblemNotice } from './ProblemNotice';
 
@@ -11,6 +12,7 @@ export type NarrativeState =
   | { status: 'done'; narrative: Narrative }
   | { status: 'error'; problem: Problem; refresh: boolean };
 
+type ReportRef = Pick<ReviewFlowReport, 'window' | 'dataAsOf'>;
 type Citing = { canCite: (factId: string) => boolean; onCite: (factId: string) => void };
 
 function Chip({ evidence, canCite, onCite }: { evidence: Evidence } & Citing) {
@@ -24,7 +26,7 @@ function Chip({ evidence, canCite, onCite }: { evidence: Evidence } & Citing) {
   );
   if (!canCite(evidence.factId)) {
     return (
-      <span className="chip chip-static" title="This number is not shown on the dashboard">
+      <span className="chip chip-static" title="This number is not linked to the dashboard">
         {content}
       </span>
     );
@@ -106,11 +108,13 @@ function Verification({ narrative }: { narrative: Narrative }) {
   );
 }
 
-type ResultProps = { narrative: Narrative; reportDataAsOf: string | null; onRegenerate?: () => void } & Citing;
+type ResultProps = { narrative: Narrative; report: ReportRef | null; onRegenerate?: () => void } & Citing;
 
-function Result({ narrative, reportDataAsOf, onRegenerate, ...citing }: ResultProps) {
+function Result({ narrative, report, onRegenerate, canCite, onCite }: ResultProps) {
   const { hypothesis } = narrative;
-  const staleData = reportDataAsOf !== null && narrative.dataAsOf !== reportDataAsOf;
+  // Evidence values equal the dashboard's only when both cover the same window and the same snapshot.
+  const differs = report !== null && !narrativeMatchesReport(narrative, report);
+  const citing = { canCite: differs ? () => false : canCite, onCite };
   return (
     <div className="narrative-body">
       <div className="narrative-meta-row">
@@ -128,10 +132,10 @@ function Result({ narrative, reportDataAsOf, onRegenerate, ...citing }: ResultPr
           </button>
         )}
       </div>
-      {staleData && (
+      {differs && (
         <p className="narrative-note">
-          This explanation is based on data as of {dateTime(narrative.dataAsOf)}; the metrics on the page are as of{' '}
-          {dateTime(reportDataAsOf)}. Regenerate to explain the current data.
+          Explains data from {windowStart(narrative.window.from)} to {windowEnd(narrative.window.to)}; the view above covers a
+          different range.
         </p>
       )}
       <p className="summary">{narrative.summary}</p>
@@ -200,14 +204,14 @@ type NarrativePanelProps = Citing & {
   ready: boolean;
   /** Why an explanation cannot be asked for with this range, or null. */
   blockedReason: string | null;
-  /** When the page's metrics were synced; an explanation of older data says so. */
-  reportDataAsOf: string | null;
+  /** The page's window and snapshot; an explanation of other data says so and its chips are not linked. */
+  report: ReportRef | null;
   onExplain: (refresh: boolean) => void;
   onCancel: () => void;
 };
 
 /** The "why": a model-written explanation whose numbers come only from the server-checked evidence. */
-export function NarrativePanel({ state, ready, blockedReason, reportDataAsOf, onExplain, onCancel, canCite, onCite }: NarrativePanelProps) {
+export function NarrativePanel({ state, ready, blockedReason, report, onExplain, onCancel, canCite, onCite }: NarrativePanelProps) {
   const citing = { canCite, onCite };
   return (
     <section className="narrative" aria-labelledby="narrative-title" aria-busy={state.status === 'loading'}>
@@ -255,11 +259,11 @@ export function NarrativePanel({ state, ready, blockedReason, reportDataAsOf, on
       )}
 
       {state.status === 'done' && (
-        <Result narrative={state.narrative} reportDataAsOf={reportDataAsOf} onRegenerate={() => onExplain(true)} {...citing} />
+        <Result narrative={state.narrative} report={report} onRegenerate={() => onExplain(true)} {...citing} />
       )}
       {state.status === 'loading' && state.previous && (
         <div className="narrative-stale">
-          <Result narrative={state.previous} reportDataAsOf={reportDataAsOf} {...citing} />
+          <Result narrative={state.previous} report={report} {...citing} />
         </div>
       )}
     </section>

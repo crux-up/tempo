@@ -259,7 +259,7 @@ export function App() {
                 state={narrative}
                 ready={reportState.status === 'done'}
                 blockedReason={narrativeBlock(query)}
-                reportDataAsOf={report?.dataAsOf ?? null}
+                report={report}
                 onExplain={explain}
                 onCancel={cancelNarrative}
                 canCite={canCite}
