@@ -55,7 +55,8 @@ async function main(): Promise<void> {
   } catch (err) {
     if (err instanceof AppError) {
       console.error(`${err.status} ${err.title}: ${err.message}`);
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     throw err;
   } finally {
