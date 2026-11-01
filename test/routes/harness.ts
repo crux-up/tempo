@@ -44,12 +44,14 @@ export class FakeSync {
   syncedFrom: string | null = null;
   /** Marks the refresh as cut short, as SyncService does when it stops before the window end. */
   refreshIncomplete = false;
+  /** Simulated sync duration, in milliseconds. */
+  delayMs = 0;
 
   constructor(private readonly store: Store) {}
 
   async ensureSynced(repo: RepoRef, window: TimeWindow): Promise<SyncResult> {
     this.calls.push({ repo, window });
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, this.delayMs));
     if (this.failWith) throw this.failWith;
     const key = repoKey(repo);
     const seeded = this.store.getRepo(key);

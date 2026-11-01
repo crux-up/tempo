@@ -64,9 +64,9 @@ describe('cross-site and DNS-rebinding guard', () => {
 });
 
 describe('server options', () => {
-  it('sets request and connection timeouts', async () => {
+  it('sets the request deadline and leaves in-flight sockets without an inactivity limit', async () => {
     h = await createHarness();
-    expect(h.app.initialConfig).toMatchObject({ requestTimeout: 180_000, connectionTimeout: 10_000 });
+    expect(h.app.initialConfig).toMatchObject({ requestTimeout: 180_000, connectionTimeout: 0 });
   });
 
   it('trusts X-Forwarded-For only from the configured proxy hops', async () => {
