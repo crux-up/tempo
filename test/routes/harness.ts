@@ -1,3 +1,5 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Writable } from 'node:stream';
 import type { Database } from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
@@ -133,7 +135,8 @@ export async function createHarness(
     reviewFlow,
     narrative,
     logger,
-    webRoot: opts.webRoot,
+    // Never fall back to the real web/dist: tests must not depend on a prior build.
+    webRoot: opts.webRoot ?? join(tmpdir(), 'tempo-no-dashboard'),
     timeouts: opts.timeouts,
   });
   return {

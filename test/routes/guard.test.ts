@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, onTestFinished } from 'vitest';
 import { createHarness, type Harness } from './harness.js';
 
 const API = '/api/v1/repos/fastify/fastify/review-flow?from=2026-03-02&to=2026-03-16';
@@ -50,7 +53,10 @@ describe('cross-site and DNS-rebinding guard', () => {
   });
 
   it('lets a cross-site navigation load the dashboard but refuses the API', async () => {
-    h = await createHarness();
+    const webRoot = mkdtempSync(join(tmpdir(), 'tempo-web-'));
+    writeFileSync(join(webRoot, 'index.html'), '<!doctype html><title>Tempo</title>');
+    onTestFinished(() => rmSync(webRoot, { recursive: true, force: true }));
+    h = await createHarness({ webRoot });
     const navigate = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', accept: 'text/html' };
     expect((await get('/?repo=fastify/fastify', navigate)).statusCode).toBe(200);
     expectForbidden(await get(API, navigate));
