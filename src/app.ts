@@ -36,6 +36,8 @@ export type AppDeps = {
   logger?: false | Logger;
   /** Built single-page app; served at `/` only when the directory exists. Defaults to `web/dist`. */
   webRoot?: string;
+  /** Receive-phase socket limits; tests lower them. Production uses the constants below. */
+  timeouts?: { connectionMs: number; headersMs: number };
 };
 
 const SECRET_KEYS = ['token', 'apiKey', 'githubToken', 'anthropicApiKey', 'GITHUB_TOKEN', 'ANTHROPIC_API_KEY'];
@@ -50,7 +52,11 @@ const DEFAULT_WEB_ROOT = fileURLToPath(new URL('../web/dist', import.meta.url));
 const RATE_LIMIT_PER_MINUTE = 120;
 /** Covers the longest request: a narrative waits up to about 150 seconds for the model. */
 const REQUEST_TIMEOUT_MS = 180_000;
-/** Idle keep-alive sockets close after 5 s; no socket inactivity limit applies to in-flight requests. */
+/** Socket inactivity limit while a request is still being received (slowloris guard). */
+const RECEIVE_TIMEOUT_MS = 10_000;
+/** Long-running API routes: first sync up to ~28 s, narrative up to ~150 s. */
+const LONG_ROUTE = /^\/api\/v1\/repos\/:owner\/:repo\/review-flow/;
+/** Idle keep-alive sockets close after 5 s. */
 const KEEP_ALIVE_TIMEOUT_MS = 5_000;
 /** Route pattern @fastify/static registers for `prefix: '/'`. */
 const STATIC_CATCH_ALL = '/*';
@@ -143,6 +149,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     frameworkErrors: sendFrameworkError,
     requestTimeout: REQUEST_TIMEOUT_MS,
     keepAliveTimeout: KEEP_ALIVE_TIMEOUT_MS,
+    connectionTimeout: deps.timeouts?.connectionMs ?? RECEIVE_TIMEOUT_MS,
+    http: { headersTimeout: deps.timeouts?.headersMs ?? RECEIVE_TIMEOUT_MS },
     trustProxy: fastifyTrustProxy(deps.config.trustProxy),
   });
 
@@ -152,6 +160,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-request-id', request.id);
     guardRequest(request, allowedHosts);
+  });
+  // Two phases: a short socket limit while receiving; once a long route is fully read and routed, lift it for that socket.
+  app.addHook('preHandler', async (request) => {
+    if (LONG_ROUTE.test(request.routeOptions.url ?? '')) request.raw.socket.setTimeout?.(REQUEST_TIMEOUT_MS); // injected requests have no real socket
   });
   registerProblemHandlers(app);
 

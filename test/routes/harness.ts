@@ -1,7 +1,7 @@
 import { Writable } from 'node:stream';
 import type { Database } from 'better-sqlite3';
 import type { FastifyInstance } from 'fastify';
-import { buildApp, createLogger } from '../../src/app.js';
+import { buildApp, createLogger, type AppDeps } from '../../src/app.js';
 import type { Config } from '../../src/config.js';
 import { openDatabase } from '../../src/db/database.js';
 import { Store, type RepoRecord } from '../../src/db/store.js';
@@ -95,6 +95,7 @@ export async function createHarness(
     narrativeMaxPerHour?: number;
     narrativeMaxPerClientPerHour?: number;
     config?: Partial<Config>;
+    timeouts?: AppDeps['timeouts'];
   } = {},
 ): Promise<Harness> {
   const db = openDatabase(':memory:');
@@ -133,6 +134,7 @@ export async function createHarness(
     narrative,
     logger,
     webRoot: opts.webRoot,
+    timeouts: opts.timeouts,
   });
   return {
     app,
